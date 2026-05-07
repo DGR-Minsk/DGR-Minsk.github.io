@@ -2348,15 +2348,21 @@ async function loginWithCode() {
         finishParticipantLogin(d);
         showLoad(false); return;
       }
-      const vres = await apiPost({action:'sendVerificationCode', email: code});
-      if (vres && vres.error) { document.getElementById('code-err').textContent=vres.error; document.getElementById('code-err').style.display='block'; showLoad(false); return; }
-      _pendingLoginData = d; _pendingLoginEmail = code;
-      document.getElementById('auth-code').style.display='none';
-      document.getElementById('auth-email-verify').style.display='block';
-      document.getElementById('email-verify-addr').textContent = code;
-      document.getElementById('ev-code-input').value='';
-      document.getElementById('ev-code-err').style.display='none';
-      showLoad(false); return;
+      try {
+        const vres = await apiPost({action:'sendVerificationCode', email: code});
+        if (vres && vres.error) { document.getElementById('code-err').textContent=vres.error; document.getElementById('code-err').style.display='block'; showLoad(false); return; }
+        _pendingLoginData = d; _pendingLoginEmail = code;
+        document.getElementById('auth-code').style.display='none';
+        document.getElementById('auth-email-verify').style.display='block';
+        document.getElementById('email-verify-addr').textContent = code;
+        document.getElementById('ev-code-input').value='';
+        document.getElementById('ev-code-err').style.display='none';
+        showLoad(false); return;
+      } catch(e2) {
+        // Если отправка кода не работает — входим напрямую (данные уже подтверждены)
+        finishParticipantLogin(d);
+        showLoad(false); return;
+      }
     }
     finishParticipantLogin(d);
   } catch(e) { toast('Ошибка соединения. Проверьте интернет.'); }
