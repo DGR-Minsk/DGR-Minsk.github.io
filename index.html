@@ -168,6 +168,9 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .icon-yellow svg .fill { fill: var(--gold); }
 .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--muted); gap: 10px; }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
+.skeleton { background: linear-gradient(90deg, var(--card) 25%, #1a1a1a 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.skeleton-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty { text-align: center; padding: 50px 20px; color: var(--muted); font-size: 13px; }
 .upload-progress { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 700; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; max-width: 480px; margin: 0 auto; }
@@ -262,7 +265,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
           <span style="font-size:10px;color:var(--muted);line-height:1.3;text-align:center">Загрузка фото в галерею + права гостя</span>
         </button>
       </div>
-      <button onclick="enterViewOnly()" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;font-family:'Inter',sans-serif;display:flex;flex-direction:column;align-items:center;gap:4px">
+      <button onclick="lbBtnAction(this,()=>Promise.resolve(enterViewOnly()))" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;font-family:'Inter',sans-serif;display:flex;flex-direction:column;align-items:center;gap:4px">
         <span style="font-size:12px;font-weight:700;color:var(--muted)">👀 Зритель</span>
         <span style="font-size:10px;color:var(--muted);line-height:1.3">Только просмотр страниц</span>
       </button>
@@ -296,7 +299,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
         <p style="font-size:12px;color:var(--muted);margin-bottom:6px;text-align:center">Код отправлен на <span id="guest-email-show" style="color:var(--gold)"></span></p>
         <input class="field" id="guest-code" placeholder="6-значный код" type="text" inputmode="numeric" maxlength="6" style="letter-spacing:6px;font-size:22px;text-align:center">
         <div class="modal-err" id="guest-code-err">Неверный код</div>
-        <button class="modal-btn" id="guest-verify-btn" onclick="verifyGuestCode()">ВОЙТИ</button>
+        <button class="modal-btn" id="guest-verify-btn" onclick="lbBtnAction(this,verifyGuestCode)">ВОЙТИ</button>
         <button class="modal-btn ghost" style="font-size:11px;padding:9px" onclick="document.getElementById('auth-guest-step2').style.display='none';document.getElementById('auth-guest-step1').style.display='block'">← Изменить email</button>
       </div>
     </div>
@@ -510,15 +513,14 @@ window.onload = async () => {
   if (s) {
     try {
       currentUser = JSON.parse(s);
-      showLoad(true);
-      await loadData();
-      showLoad(false);
+      // Показываем приложение сразу со скелетоном, данные грузим в фоне
       showApp();
+      await loadData();
+      updateUserDisplay();
+      renderAll();
     } catch(e) {
-      // If load fails, show auth screen
       currentUser = null;
       localStorage.removeItem('dgr_user');
-      showLoad(false);
       showAuth();
     }
   } else {
@@ -536,13 +538,19 @@ async function apiPost(body) {
   return r.json();
 }
 
-async function loadData() {
-  showLoad(true);
+async function loadData(force=false) {
+  const isFirstLoad = !participants.length;
+  // Использовать sessionStorage кэш если данные свежие (< 30 сек)
+  const cacheKey = 'dgr_cache';
+  const cacheTs = parseInt(sessionStorage.getItem('dgr_cache_ts')||'0');
+  const cacheAge = Date.now() - cacheTs;
+  if (!force && !isFirstLoad && cacheAge < 30000) return; // данные свежие
+  if (!isFirstLoad) showLoad(true);
   try {
     const [p, g, r] = await Promise.all([
       api({action:'getParticipants'}),
       api({action:'getGallery'}),
-      api({action:'getReactions'})
+      api({action:'getReactions'})  // TODO: lazy load per-photo
     ]);
     participants = p.participants || [];
     gallery = g.photos || [];
@@ -888,7 +896,7 @@ async function sendGuestCodeReturning() {
   if (prev) {
     currentUser = { name: prev.name, email, row:0, isGuest:true, data:null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    loadData().then(showApp);
+    loadData(true).then(showApp);
     return;
   }
   // Иначе отправить код
@@ -941,7 +949,7 @@ async function sendGuestCode() {
     const guestName = name || prev.name || email.split('@')[0];
     currentUser = { name: guestName, email, row:0, isGuest:true, data:null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    loadData().then(showApp);
+    loadData(true).then(showApp);
     return;
   }
   // Сначала проверяем — только потом отправляем код
@@ -985,13 +993,14 @@ async function verifyGuestCode() {
     const res = await apiPost({action:'verifyCode', email, code});
     if(res&&res.error){errEl.textContent=res.error;errEl.style.display='block';if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ';}return;}
     const guestName = (document.getElementById('guest-name')||{}).value?.trim()||email.split('@')[0];
+    // Блокировка гостей проверяется через verifyCode — если заблокирован, не пускаем
     currentUser = { name: guestName, email, row:0, isGuest:true, data:null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
     // Сохранить как верифицированный email
     const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
     verified[email.toLowerCase()] = { name: guestName, ts: Date.now() };
     localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
-    loadData().then(showApp);
+    loadData(true).then(showApp);
   } catch(e){errEl.textContent='Ошибка. Попробуйте ещё раз.';errEl.style.display='block';if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ';}}
 }
 
@@ -1032,7 +1041,7 @@ async function verifyPhotographerCode() {
     const isApproved = approved.find(p=>p.email&&p.email.toLowerCase()===email.toLowerCase());
     currentUser = { name: name||email.split('@')[0], email, row:0, isGuest:false, isPhotographer:true, isApprovedPhotographer:!!isApproved, data:null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    loadData().then(showApp);
+    loadData(true).then(showApp);
   } catch(e) { errEl.textContent='Ошибка. Попробуйте ещё раз.'; errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ КАК ФОТОГРАФ';} }
 }
 
@@ -1052,7 +1061,9 @@ function submitGuestLogin() { sendGuestCode(); }
 function enterViewOnly() {
   currentUser = null;
   localStorage.removeItem('dgr_user');
-  loadData().then(showApp);
+  // Показать приложение сразу со скелетоном
+  showApp();
+  loadData(true).then(() => { updateUserDisplay(); renderAll(); });
 }
 async function modalLoginAsGuest() {
   const email = document.getElementById('modal-guest-email').value.trim();
@@ -1121,7 +1132,7 @@ async function authChoiceSubmitParticipant() {
   if (!code) return;
   try {
     const d = await apiPost({action:'login', code});
-    if (!d||!d.participant) throw new Error();
+    if (!d||d.error) { const e=document.getElementById('auth-choice-code-err'); e.textContent=d?.error==='blocked'?'Ваш аккаунт заблокирован администратором':'Код не найден'; e.style.display='block'; return; }
     const isAdminUser = Object.entries(d.participant).some(([k,v]) => k.toLowerCase().includes('admin') && v && v!=='0' && String(v).toUpperCase()!=='FALSE');
     currentUser = { name: d.participant['ФИО'] || 'Администратор', row:d.participant._row, isGuest:false, isAdmin:isAdminUser, data:d.participant };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
@@ -1216,13 +1227,13 @@ async function loginAsApprovedPhotographer() {
   if (rec) {
     currentUser = { name: rec.name, email: rec.email, row: 0, isGuest: false, isPhotographer: true, data: null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    loadData().then(showApp);
+    loadData(true).then(showApp);
   } else {
     apiPost({ action: 'photographerLogin', email }).then(d => {
       if (d && d.name) {
         currentUser = { name: d.name, email, row: 0, isGuest: false, isPhotographer: true, data: null };
         localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-        loadData().then(showApp);
+        loadData(true).then(showApp);
       } else {
         errEl.textContent = 'Email не найден в списке одобренных';
         errEl.style.display = 'block';
@@ -1312,7 +1323,12 @@ async function modalLogin() {
   if (!code) return;
   showLoad(true);
   const d = await api({action:'login', code});
-  if (d.error) { document.getElementById('modal-err').style.display='block'; showLoad(false); return; }
+  if (d.error) {
+    const me = document.getElementById('modal-err');
+    me.textContent = d.error==='blocked' ? 'Ваш аккаунт заблокирован администратором' : 'Email или код не найден. Проверьте и попробуйте снова.';
+    me.style.display='block'; showLoad(false); return;
+  }
+  // Блокировка проверяется в Apps Script (error: 'blocked')
   const isAdminUser = Object.entries(d.participant).some(([k,v]) => k.toLowerCase().includes('admin') && v && v!=='0' && String(v).toUpperCase()!=='FALSE');
   currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: d.participant };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
@@ -1336,7 +1352,7 @@ function modalLoginAsPhotographer() {
   if (!name) { document.getElementById('modal-photographer-name').focus(); return; }
   currentUser = { name, row:0, isGuest:false, isPhotographer:true, data:null };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-  closeAuthModal(); loadData().then(() => { updateUserDisplay(); renderAll(); toast('Добро пожаловать, ' + name + '!'); });
+  closeAuthModal(); loadData(true).then(() => { updateUserDisplay(); renderAll(); toast('Добро пожаловать, ' + name + '!'); });
 }
 
 function logout() {
@@ -1437,8 +1453,14 @@ function setMemberFilter(kind, val) {
 }
 
 function filterMembers() { renderMembers(); }
+let _lastMembersHash = '';
 function renderMembers() {
   const q = (document.getElementById('search-input')?.value||'').toLowerCase();
+  const grid = document.getElementById('members-grid');
+  if (!participants.length) {
+    if (grid && !grid.innerHTML.includes('skeleton')) grid.innerHTML='<div class="empty">Загрузка участников...</div>';
+    return;
+  }
   const data = participants.filter(p => {
     if (!p['ФИО']) return false;
     if (q && !((p['ФИО']||'').toLowerCase().includes(q) || (p['МОТОЦИКЛ']||'').toLowerCase().includes(q))) return false;
@@ -1618,7 +1640,7 @@ function openDetail(row) {
             <div class="detail-bike-name">${p['МОТОЦИКЛ']||'Мотоцикл не указан'}</div>
             ${isMe?`<button onclick="editBikeInfo()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px" title="Редактировать">✏️</button>`:''}
           </div>
-          ${isMe ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">${(p['email']||p['Email']||p['EMAIL'])?'📧 '+(p['email']||p['Email']||p['EMAIL']):'<span style="color:var(--gold);cursor:pointer" onclick="openEmailModal()">+ Привязать email</span>'}</div>` : ''}
+          ${isMe ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">${(p['email']||p['Email']||p['EMAIL'])?`<span style="display:flex;align-items:center;gap:8px">${p['email']||p['Email']||p['EMAIL']} <button onclick="removeEmail()" style="background:none;border:none;color:#e53935;font-size:11px;cursor:pointer;padding:0;font-weight:600">✕ Удалить</button></span>`:'<span style="color:var(--gold);cursor:pointer" onclick="openEmailModal()">+ Привязать email</span>'}</div>` : ''}
         </div>
         ${isMe ? `<button onclick="logout()" title="Выйти" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;align-self:flex-start">↪ Выход</button>` : ''}
       </div>
@@ -1808,7 +1830,7 @@ async function savePhoto(url) {
   } else if (type==='personal_gallery') {
     await apiPost({action:'addGalleryPhoto', owner_row_id:currentUser.row, owner_name:(currentUser.data&&currentUser.data['ФИО'])||currentUser.name, photo_url:url, type:'personal'});
     toast('Фото добавлено!'); 
-    await loadData();
+    await loadData(true);
     const me = participants.find(p => p._row == currentUser.row);
     if (me) { currentUser.data = me; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
     renderAll();
@@ -2105,7 +2127,7 @@ async function _doDeleteEverywhere() {
     }
     toast('Фото удалено везде');
     closeLightbox();
-    await loadData(); renderAll();
+    await loadData(true); renderAll();
     if (_currentTab === 3) { /* остаёмся в галерее */ }
     else if (currentRecord) openDetail(currentRecord._row);
   } catch(e) { toast('Ошибка удаления'); }
@@ -2138,7 +2160,7 @@ async function _doDeleteMyPhoto() {
     }
     toast('Фото удалено');
     closeLightbox();
-    await loadData();
+    await loadData(true);
     renderAll();
     if (_currentTab === 3) { /* остаёмся в галерее */ }
     else if (currentRecord) openDetail(currentRecord._row);
@@ -2225,14 +2247,62 @@ function toast(msg) {
 }
 
 
+async function removeEmail() {
+  showConfirm('Удалить привязанный email? Вход будет возможен только по коду участника.', async () => {
+    showLoad(true);
+    await apiPost({action:'updateParticipant', row:currentUser.row, fields:{email:''}});
+    if (currentUser.data) currentUser.data['email'] = '';
+    localStorage.setItem('dgr_user', JSON.stringify(currentUser));
+    toast('Email удалён');
+    await loadData(true);
+    const me = participants.find(p=>String(p._row)===String(currentUser.row));
+    if(me){currentUser.data=me;localStorage.setItem('dgr_user',JSON.stringify(currentUser));}
+    renderAll();
+    if(currentRecord) openDetail(currentRecord._row);
+    showLoad(false);
+  }, 'Удалить email', 'УДАЛИТЬ');
+}
 function openEmailModal() {
   document.getElementById('email-modal').classList.add('open');
+  document.getElementById('email-step1').style.display = 'block';
+  document.getElementById('email-step2').style.display = 'none';
+  document.getElementById('email-input').value = '';
+  document.getElementById('email-err').style.display = 'none';
 }
 
-async function saveEmail() {
+async function sendEmailVerifyCode() {
   const email = document.getElementById('email-input').value.trim();
   const errEl = document.getElementById('email-err');
   if (!email || !email.includes('@')) { errEl.textContent='Введите корректный email'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  // Проверить не занят ли
+  const conflict = participants.find(p => p['email'] && p['email'].toLowerCase()===email.toLowerCase() && String(p._row)!==String(currentUser.row));
+  if (conflict) { errEl.textContent=`Этот email уже привязан к ${conflict['ФИО']||'другому участнику'}`; errEl.style.display='block'; return; }
+  const res = await apiPost({action:'sendVerificationCode', email});
+  if (res && res.error) { errEl.textContent=res.error; errEl.style.display='block'; return; }
+  document.getElementById('email-verify-show').textContent = email;
+  document.getElementById('email-step1').style.display = 'none';
+  document.getElementById('email-step2').style.display = 'block';
+  document.getElementById('email-code-input').value = '';
+  document.getElementById('email-code-err').style.display = 'none';
+}
+
+async function confirmEmailCode() {
+  const email = document.getElementById('email-input').value.trim();
+  const code = document.getElementById('email-code-input').value.trim();
+  const errEl = document.getElementById('email-code-err');
+  if (!code || code.length < 6) { errEl.textContent='Введите 6-значный код'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  const vres = await apiPost({action:'verifyCode', email, code});
+  if (vres && vres.error) { errEl.textContent=vres.error; errEl.style.display='block'; return; }
+  // Сохранить email
+  await saveEmail(email);
+}
+
+async function saveEmail(emailOverride) {
+  const email = emailOverride || document.getElementById('email-input').value.trim();
+  const errEl = document.getElementById('email-err');
+  if (!email || !email.includes('@')) { if(errEl){errEl.textContent='Введите корректный email'; errEl.style.display='block';} return; }
   // Проверить не занят ли email другим участником
   const conflict = participants.find(p => p['email'] && p['email'].toLowerCase()===email.toLowerCase() && String(p._row)!==String(currentUser.row));
   if (conflict) { errEl.textContent=`Этот email уже привязан к участнику ${conflict['ФИО']||''}`; errEl.style.display='block'; return; }
@@ -2244,6 +2314,8 @@ async function saveEmail() {
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
   toast('Email сохранён! Теперь можно входить по email.');
   document.getElementById('email-modal').classList.remove('open');
+  document.getElementById('email-step1').style.display = 'block';
+  document.getElementById('email-step2').style.display = 'none';
   await loadData();
   const me = participants.find(p => String(p._row)===String(currentUser.row));
   if (me) { currentUser.data = me; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
@@ -2256,36 +2328,116 @@ document.getElementById('photo-link-modal')?.addEventListener('click', e => { if
 
 
 // ── ADMIN ──
+let _pendingLoginData = null, _pendingLoginEmail = null;
+
 async function loginWithCode() {
   const code = document.getElementById('code-input').value.trim();
   if (!code) return;
   showLoad(true);
   try {
     const d = await api({action:'login', code});
-    if (d.error) { document.getElementById('code-err').style.display='block'; showLoad(false); return; }
-    const adminKey = Object.keys(d.participant).find(k => k.toLowerCase().includes('admin'));
-    const isAdminUser = adminKey ? (d.participant[adminKey] && d.participant[adminKey]!=='0' && String(d.participant[adminKey]).toUpperCase()!=='FALSE') : false;
-    if (adminKey) console.log('admin field:', adminKey, '=', d.participant[adminKey], '→ isAdmin:', isAdminUser);
-    currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: d.participant };
-    localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    await loadData(); showApp();
+    if (d.error) {
+      const me = document.getElementById('code-err');
+      me.textContent = d.error==='blocked' ? 'Ваш аккаунт заблокирован администратором' : 'Email или код не найден. Проверьте и попробуйте снова.';
+      me.style.display='block'; showLoad(false); return;
+    }
+    if (code.includes('@')) {
+      // Если email уже верифицирован на этом устройстве — входим без кода
+      const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
+      if (verified[code.toLowerCase()]) {
+        finishParticipantLogin(d);
+        showLoad(false); return;
+      }
+      const vres = await apiPost({action:'sendVerificationCode', email: code});
+      if (vres && vres.error) { document.getElementById('code-err').textContent=vres.error; document.getElementById('code-err').style.display='block'; showLoad(false); return; }
+      _pendingLoginData = d; _pendingLoginEmail = code;
+      document.getElementById('auth-code').style.display='none';
+      document.getElementById('auth-email-verify').style.display='block';
+      document.getElementById('email-verify-addr').textContent = code;
+      document.getElementById('ev-code-input').value='';
+      document.getElementById('ev-code-err').style.display='none';
+      showLoad(false); return;
+    }
+    finishParticipantLogin(d);
   } catch(e) { toast('Ошибка соединения. Проверьте интернет.'); }
   showLoad(false);
+}
+
+async function confirmParticipantEmailCode() {
+  const code = document.getElementById('ev-code-input').value.trim();
+  const errEl = document.getElementById('ev-code-err');
+  if (!code || code.length < 6) { errEl.textContent='Введите 6-значный код'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  showLoad(true);
+  const vres = await apiPost({action:'verifyCode', email: _pendingLoginEmail, code});
+  if (vres && vres.error) { errEl.textContent=vres.error; errEl.style.display='block'; showLoad(false); return; }
+  // Сохранить как верифицированный
+  const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
+  verified[_pendingLoginEmail.toLowerCase()] = { name: d?.participant?.['ФИО']||'', ts: Date.now() };
+  localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
+  finishParticipantLogin(_pendingLoginData);
+  showLoad(false);
+}
+
+function finishParticipantLogin(d) {
+  const adminKey = Object.keys(d.participant).find(k => k.toLowerCase().includes('admin'));
+  const isAdminUser = adminKey ? (d.participant[adminKey] && d.participant[adminKey]!=='0' && String(d.participant[adminKey]).toUpperCase()!=='FALSE') : false;
+  currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: d.participant };
+  localStorage.setItem('dgr_user', JSON.stringify(currentUser));
+  showApp();
+  loadData(true).then(() => { updateUserDisplay(); renderAll(); });
 }
 
 let adminEditRow = null;
 let adminEditData = null;
 
-function openAdminPanel() {
+let _blockedCache = null;
+async function getBlockedListCached() {
+  if (_blockedCache) return _blockedCache;
+  try {
+    const res = await api({action:'getBlockedList'});
+    _blockedCache = (res && res.blocked) ? res.blocked : [];
+  } catch(e) { _blockedCache = []; }
+  return _blockedCache;
+}
+async function isBlockedAPI(key) {
+  if (!key) return false;
+  const blocked = await getBlockedListCached();
+  return blocked.some(b => b.key === String(key).toLowerCase().trim());
+}
+async function adminToggleBlockParticipant(key, name) {
+  if (!key) { toast('У участника нет email или кода'); return; }
+  const blocked = await getBlockedListCached();
+  const isBlocked = blocked.some(b => b.key === key.toLowerCase());
+  if (isBlocked) {
+    await apiPost({action:'unblockUser', key});
+    toast(`${name} разблокирован`);
+  } else {
+    await apiPost({action:'blockUser', key, name, type:'participant'});
+    toast(`${name} заблокирован`);
+  }
+  _blockedCache = null;
+  openAdminPanel();
+}
+async function openAdminPanel() {
   const list = document.getElementById('admin-participants-list');
-  list.innerHTML = participants.map(p => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:13px">${p['ФИО']}</div>
-        <div style="font-size:11px;color:var(--muted)">${p['МОТОЦИКЛ']||'нет'}</div>
+  const blockedP = await getBlockedListCached();
+  list.innerHTML = participants.filter(p=>p['ФИО']).map(p => {
+    const pEmail = (p['email']||'').toLowerCase();
+    const pCode = String(p['access_code']||'');
+    const isBlocked = (pEmail && blockedP.some(b=>b.key===pEmail)) || blockedP.some(b=>b.key===pCode);
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px${isBlocked?';opacity:0.6':''}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${p['ФИО']}${isBlocked?' <span style="color:#e53935;font-size:10px">🚫</span>':''}</div>
+          <div style="font-size:11px;color:var(--muted)">${p['МОТОЦИКЛ']||'нет'}${p['email']?' · '+p['email']:''}</div>
+        </div>
+        <button onclick="openAdminEdit(${p._row})" style="background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:7px 10px;font-weight:700;font-size:11px;cursor:pointer">✏</button>
+        <button onclick="lbBtnAction(this,()=>adminToggleBlockParticipant('${pEmail||pCode}','${p['ФИО']}')" style="background:none;border:1px solid ${isBlocked?'var(--gold)':'#e53935'};color:${isBlocked?'var(--gold)':'#e53935'};border-radius:8px;padding:6px 8px;font-size:10px;font-weight:700;cursor:pointer">${isBlocked?'Разбл.':'Блок.'}</button>
       </div>
-      <button onclick="openAdminEdit(${p._row})" style="background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer">✏ Ред.</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   document.getElementById('admin-panel').style.display = 'block';
   // Update requests badge
   const requests = JSON.parse(localStorage.getItem('dgr_photographer_requests') || '[]');
@@ -2323,7 +2475,7 @@ async function adminSaveEdit() {
   await apiPost({action:'updateParticipant', row:adminEditRow, fields:updated});
   toast('Сохранено!');
   document.getElementById('admin-edit-modal').classList.remove('open');
-  await loadData(); renderAll(); showLoad(false);
+  await loadData(true); renderAll(); showLoad(false);
 }
 
 async function deleteContestPhoto(type) {
@@ -2333,7 +2485,7 @@ async function deleteContestPhoto(type) {
   showLoad(true);
   await apiPost({action:'updateParticipant', row:currentUser.row, fields:{[sheetFm[type]]:'', [fm[type]]:''}});
   toast('Фото удалено');
-  await loadData();
+  await loadData(true);
   renderAll();
   if (currentRecord) openDetail(currentRecord._row);
   showLoad(false);
@@ -2342,18 +2494,94 @@ async function adminDeletePhoto(type) {
   const fm = { contest_bike:'фото СТАЛЬНАЯ КЛАССИКА лучший байк', contest_style:'фото ИКОНА СТИЛЯ лучший образ', live:'ЖИВОЕ ФОТО БАЙКА' };
   showLoad(true);
   await apiPost({action:'updateParticipant', row:adminEditRow, fields:{[fm[type]]:''}});
-  toast('Фото удалено'); openAdminEdit(adminEditRow); await loadData(); renderAll(); showLoad(false);
+  toast('Фото удалено'); openAdminEdit(adminEditRow); await loadData(true); renderAll(); showLoad(false);
 }
 
+
+async function renderAdminGuests() {
+  const el = document.getElementById('admin-section-u');
+  el.innerHTML = '<div class="empty">Загрузка...</div>';
+  const blocked = await getBlockedListCached();
+  const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
+  const guests = Object.entries(verified).map(([email, data]) => ({email, ...data}));
+  if (!guests.length) { el.innerHTML='<div class="empty">Нет зарегистрированных гостей</div>'; return; }
+  el.innerHTML = guests.map((g,i) => {
+    const isBlocked = blocked.some(b=>b.key===g.email.toLowerCase());
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px${isBlocked?';opacity:0.6':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:700">${g.name||'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">📧 ${g.email}</div>
+          ${isBlocked?'<div style="font-size:10px;color:#e53935;margin-top:2px">🚫 Заблокирован</div>':''}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="adminToggleBlockUser('${g.email}','${g.name||''}','guest')" style="background:none;border:1px solid ${isBlocked?'var(--gold)':'#e53935'};color:${isBlocked?'var(--gold)':'#e53935'};border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${isBlocked?'Разблокировать':'Заблокировать'}</button>
+          <button onclick="adminDeleteGuest('${g.email}')" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">Удалить</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function adminToggleBlockUser(email, name, type) {
+  const blocked = await getBlockedListCached();
+  const isBlocked = blocked.some(b => b.key === email.toLowerCase());
+  if (isBlocked) {
+    await apiPost({action:'unblockUser', key:email});
+    toast('Разблокировано');
+  } else {
+    await apiPost({action:'blockUser', key:email, name:name||email, type:type||'guest'});
+    toast('Заблокировано');
+  }
+  _blockedCache = null;
+  if(type==='photographer') renderAdminPhotographers(); else renderAdminGuests();
+}
+
+function adminDeleteGuest(email) {
+  showConfirm(`Удалить гостя ${email}? Он сможет снова зарегистрироваться.`, () => {
+    const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
+    delete verified[email.toLowerCase()];
+    localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
+    toast('Гость удалён');
+    renderAdminGuests();
+  }, 'Удалить гостя');
+}
+
+async function renderAdminPhotographers() {
+  const el = document.getElementById('admin-section-ph');
+  el.innerHTML = '<div class="empty">Загрузка...</div>';
+  const approved = JSON.parse(localStorage.getItem('dgr_approved_photographers')||'[]');
+  const blocked = await getBlockedListCached();
+  if (!approved.length) { el.innerHTML='<div class="empty">Нет одобренных фотографов</div>'; return; }
+  el.innerHTML = approved.map((p,i) => {
+    const isBlocked = blocked.some(b=>b.key===p.email.toLowerCase());
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px${isBlocked?';opacity:0.6':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:700">${p.name||'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">📧 ${p.email}</div>
+          <div style="font-size:10px;color:var(--muted)">Одобрен: ${p.approvedAt?new Date(p.approvedAt).toLocaleDateString('ru-RU'):''}</div>
+          ${isBlocked?'<div style="font-size:10px;color:#e53935;margin-top:2px">🚫 Заблокирован</div>':''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <button onclick="adminToggleBlockUser('${p.email}')" style="background:none;border:1px solid ${isBlocked?'var(--gold)':'#e53935'};color:${isBlocked?'var(--gold)':'#e53935'};border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">${isBlocked?'Разблокировать':'Заблокировать'}</button>
+          <button onclick="adminRevokePhotographer(${i});renderAdminPhotographers()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">Отозвать</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
 function adminSwitchTab(t) {
-  ['p','g','r'].forEach(x => {
-    document.getElementById('admin-section-'+x).style.display = x===t ? 'block' : 'none';
+  ['p','g','r','u','ph'].forEach(x => {
+    const sec = document.getElementById('admin-section-'+x);
+    if(sec) sec.style.display = x===t ? 'block' : 'none';
     const btn = document.getElementById('admin-tab-'+x);
-    btn.style.borderBottomColor = x===t ? '#e53935' : 'transparent';
-    btn.style.color = x===t ? '#e53935' : 'var(--muted)';
+    if(btn){ btn.style.borderBottomColor = x===t ? '#e53935' : 'transparent'; btn.style.color = x===t ? '#e53935' : 'var(--muted)'; }
   });
   if (t === 'g') renderAdminGallery();
   if (t === 'r') renderAdminRequests();
+  if (t === 'u') renderAdminGuests();
+  if (t === 'ph') renderAdminPhotographers();
 }
 
 function renderAdminGallery() {
@@ -2403,7 +2631,7 @@ function renderAdminRequests() {
       <div style="font-size:12px;color:var(--muted);margin:6px 0 10px;line-height:1.4">${r.motivation}</div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:10px">${r.date ? new Date(r.date).toLocaleDateString('ru-RU') : ''}</div>
       <div style="display:flex;gap:8px">
-        <button onclick="adminApprovePhotographer(${i})" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✓ Одобрить</button>
+        <button onclick="lbBtnAction(this,()=>adminApprovePhotographer(${i}))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✓ Одобрить</button>
         <button onclick="adminRejectPhotographer(${i})" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✕ Отклонить</button>
       </div>
     </div>
@@ -2711,7 +2939,7 @@ function openNotifications() {
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button onclick="adminApprovePhotographer(${i});openNotifications()" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✓ Одобрить</button>
+        <button onclick="lbBtnAction(this,()=>Promise.resolve(adminApprovePhotographer(${i})).then(()=>openNotifications()))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✓ Одобрить</button>
         <button onclick="adminRejectPhotographer(${i});openNotifications()" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✕ Отклонить</button>
       </div>
     </div>`;
@@ -2793,7 +3021,7 @@ async function saveFactoryPhoto() {
   if (res.error) { toast('Ошибка: ' + res.error); showLoad(false); return; }
   toast('Фото обновлено!');
   document.getElementById('factory-photo-modal').classList.remove('open');
-  await loadData(); renderAll();
+  await loadData(true); renderAll();
   if (currentRecord) setTimeout(() => openDetail(currentRecord._row), 100);
   showLoad(false);
 }
@@ -2817,7 +3045,7 @@ async function saveBikeInfo() {
   toast('Сохранено!');
   if (riderName) { currentUser.name = riderName; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
   document.getElementById('bike-edit-modal').classList.remove('open');
-  await loadData(); renderAll();
+  await loadData(true); renderAll();
   if (currentRecord) setTimeout(() => openDetail(currentRecord._row), 100);
   showLoad(false);
 }
@@ -2855,7 +3083,7 @@ async function selectBikeStyle(style) {
   const res = await apiPost({action:'updateParticipant', row:currentUser.row, fields:{bike_style: style}});
   if (res.error) { toast('Ошибка сохранения'); showLoad(false); return; }
   toast('Стиль сохранён!');
-  await loadData();
+  await loadData(true);
   renderAll();
   renderMemberFilters();
   if (currentRecord) setTimeout(() => openDetail(currentRecord._row), 100);
@@ -2890,7 +3118,7 @@ async function saveBikeSpecs() {
   if (res.error) { toast('Ошибка: ' + res.error); showLoad(false); return; }
   toast('Характеристики сохранены');
   document.getElementById('specs-edit-modal').classList.remove('open');
-  await loadData();
+  await loadData(true);
   renderAll();
   if (currentRecord) setTimeout(() => openDetail(currentRecord._row), 100);
   showLoad(false);
@@ -2971,11 +3199,22 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="modal-overlay" id="email-modal">
   <div class="modal-sheet">
     <div class="modal-title">Привязать Email</div>
-    <div class="modal-sub">Чтобы входить с других устройств без кода — сохраните email. При следующем входе введите email вместо кода.</div>
-    <input class="field" id="email-input" placeholder="ваш@email.com" type="email">
-    <div class="modal-err" id="email-err">Введите корректный email</div>
-    <button class="modal-btn" onclick="lbBtnAction(this,saveEmail)">СОХРАНИТЬ</button>
-    <button class="modal-btn ghost" onclick="document.getElementById('email-modal').classList.remove('open')">Отмена</button>
+    <!-- Шаг 1: ввод email -->
+    <div id="email-step1">
+      <div class="modal-sub">Введите email — отправим код подтверждения</div>
+      <input class="field" id="email-input" placeholder="ваш@email.com" type="email">
+      <div class="modal-err" id="email-err">Введите корректный email</div>
+      <button class="modal-btn" onclick="lbBtnAction(this,sendEmailVerifyCode)">ПОЛУЧИТЬ КОД</button>
+      <button class="modal-btn ghost" onclick="document.getElementById('email-modal').classList.remove('open')">Отмена</button>
+    </div>
+    <!-- Шаг 2: ввод кода -->
+    <div id="email-step2" style="display:none">
+      <div class="modal-sub">Код отправлен на <span id="email-verify-show" style="color:var(--gold)"></span></div>
+      <input class="field" id="email-code-input" placeholder="6-значный код" type="text" inputmode="numeric" maxlength="6" style="letter-spacing:6px;font-size:22px;text-align:center">
+      <div class="modal-err" id="email-code-err">Неверный код</div>
+      <button class="modal-btn" onclick="lbBtnAction(this,confirmEmailCode)">ПОДТВЕРДИТЬ</button>
+      <button class="modal-btn ghost" style="font-size:11px;padding:9px" onclick="document.getElementById('email-step2').style.display='none';document.getElementById('email-step1').style.display='block'">← Изменить email</button>
+    </div>
   </div>
 </div>
 
@@ -2990,6 +3229,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <button id="admin-tab-p" onclick="adminSwitchTab('p')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid #e53935;color:#e53935;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px">Участники</button>
       <button id="admin-tab-g" onclick="adminSwitchTab('g')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px">Галерея</button>
       <button id="admin-tab-r" onclick="adminSwitchTab('r')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px">Заявки<span id="admin-req-badge" style="display:none;background:#e53935;color:white;border-radius:50%;font-size:9px;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px">0</span></button>
+      <button id="admin-tab-u" onclick="adminSwitchTab('u')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px">Гости</button>
+      <button id="admin-tab-ph" onclick="adminSwitchTab('ph')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.5px">Фото&shy;графы</button>
     </div>
   </div>
   <div id="admin-section-p" style="padding:14px">
@@ -3044,7 +3285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="comments-list" class="comments-list"></div>
     <div class="comment-input-wrap" style="margin-top:14px;position:sticky;bottom:0;background:var(--black);padding:10px 0">
       <input class="comment-input" id="comment-input" placeholder="Написать комментарий..." onkeydown="if(event.key==='Enter')sendComment()">
-      <button class="comment-send" onclick="sendComment()">→</button>
+      <button class="comment-send" onclick="lbBtnAction(this,sendComment)">→</button>
     </div>
   </div>
 </div>
@@ -3145,7 +3386,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal-sheet">
     <div class="modal-title">Выход</div>
     <div class="modal-sub">Вы уверены, что хотите выйти из аккаунта?</div>
-    <button class="modal-btn" onclick="confirmLogout()">ВЫЙТИ</button>
+    <button class="modal-btn" onclick="lbBtnAction(this,()=>Promise.resolve(confirmLogout()))">ВЫЙТИ</button>
     <button class="modal-btn ghost" onclick="document.getElementById('logout-modal').classList.remove('open')">Отмена</button>
   </div>
 </div>
@@ -3181,9 +3422,12 @@ document.addEventListener('DOMContentLoaded', () => {
     <button onclick="document.getElementById('logout-modal').classList.add('open')" style="width:100%;background:transparent;border:1px solid #e53935;color:#e53935;border-radius:10px;padding:12px;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px">↪ Выйти из аккаунта</button>
   </div>
 </div>
-<div class="modal-overlay" id="auth-choice-modal">
+<div class="modal-overlay" id="auth-choice-modal" onclick="if(event.target===this)closeAuthChoice()">
   <div class="modal-sheet">
-    <div class="modal-title">Войдите для продолжения</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="modal-title" style="margin-bottom:0">Войдите для продолжения</div>
+      <button onclick="closeAuthChoice()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px">✕</button>
+    </div>
     <div class="modal-sub" id="auth-choice-reason" style="margin-bottom:12px"></div>
     <div id="auth-choice-main">
       <button class="modal-btn" style="background:transparent;border:1.5px solid var(--gold);color:var(--gold)" onclick="authChoiceSelectGuest()">👁 Гость</button>
@@ -3191,7 +3435,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <button class="modal-btn" style="margin-top:0" onclick="authChoiceSelectParticipant()">🏍 Участник</button>
       <button class="modal-btn ghost" style="margin-top:8px;font-size:12px" onclick="authChoiceSelectPhotographer()">📷 Фотограф</button>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:8px">Загрузка фото в галерею + права гостя</div>
-      <button class="modal-btn ghost" style="margin-top:0;font-size:11px;padding:9px;color:var(--muted);border-color:var(--border)" onclick="closeAuthChoice()">👀 Зритель — только просмотр страниц</button>
+      <button class="modal-btn ghost" style="margin-top:0;font-size:11px;padding:9px;color:var(--muted);border-color:var(--border)" onclick="closeAuthChoice();enterViewOnly()">👀 Зритель — только просмотр страниц</button>
     </div>
     <div id="auth-choice-guest-form" style="display:none">
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Введите email для гостевого входа</p>
