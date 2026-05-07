@@ -18,7 +18,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 #main-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 80px; }
 .header { background: rgba(8,8,8,.97); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); padding: 12px 16px 10px; flex-shrink: 0; }
 .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.header-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--gold); letter-spacing: 3px; font-weight: 400; text-transform: uppercase; line-height: 1; }
+.header-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--gold); letter-spacing: 1px; font-weight: 400; text-transform: uppercase; line-height: 1; margin-right: 6px; }
 #header-logo { width: 28px; height: 28px; display: block; flex-shrink: 0; }
 .header-top > div:first-child { gap: 10px !important; }
 .user-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; color: var(--black); cursor: pointer; border: none; overflow: hidden; flex-shrink: 0; }
@@ -211,7 +211,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
     <div style="display:flex;align-items:center;gap:10px">
       <img id="header-logo" src="data:image/png;base64,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" style="width:36px;height:36px;border-radius:50%;display:none" alt="DGR">
       <span id="header-logo-svg" class="icon-yellow" style="width:24px;height:22px;display:none;flex-shrink:0;overflow:visible"></span>
-      <div class="header-title" id="header-title" style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px">УЧАСТНИКИ</div>
+      <div class="header-title" id="header-title" style="font-family:'Bebas Neue',sans-serif;letter-spacing:1px;margin-right:6px">УЧАСТНИКИ</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <button id="about-btn" title="О мероприятии" style="background:none;border:none;color:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0" onclick="goAbout()">
@@ -1371,23 +1371,22 @@ function updateUserDisplay() {
     el.innerHTML = `<button class="login-btn" onclick="goToStartScreen()">Войти</button>`;
   } else if (currentUser.isGuest) {
     const initials = currentUser.name.substring(0,2).toUpperCase();
-    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="openGuestCabinet()"><button class="user-btn" style="background:var(--border);color:var(--text);font-size:11px;font-weight:900">${initials}</button><span style="font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.5px">ГОСТЬ</span></div>`;
+    el.innerHTML = `<div style="display:flex;align-items:center;cursor:pointer" onclick="openGuestCabinet()"><button class="user-btn" style="background:var(--card);border:1px solid var(--border)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="#888"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg></button></div>`;
     if (notifBtn) notifBtn.style.display = 'none';
   } else if (currentUser.isPhotographer) {
     const initials = currentUser.name.substring(0,2).toUpperCase();
-    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="openPhotographerCabinet()"><button class="user-btn" style="background:var(--gold);color:var(--black);font-size:11px;font-weight:900">${initials}</button><span style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:.5px">📷<br>${currentUser.name.split(' ')[0]}</span></div>`;
+    el.innerHTML = `<div style="display:flex;align-items:center;cursor:pointer" onclick="openPhotographerCabinet()"><button class="user-btn" style="background:var(--gold);color:var(--black);font-size:16px">📷</button></div>`;
     if (notifBtn) notifBtn.style.display = 'none';
   } else if (isAdmin()) {
     const portrait = currentUser.data && currentUser.data['portrait_photo'];
     const realName = (currentUser.data && currentUser.data['ФИО']) || 'Администратор';
     const initials = realName.split(' ').map(w=>w[0]||'').join('').substring(0,2).toUpperCase()||'АД';
     el.innerHTML = `<div style="display:flex;align-items:center;gap:6px">
-      <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="openMyProfile()">
+      <div style="display:flex;align-items:center;cursor:pointer" onclick="openMyProfile()">
         <div style="position:relative">
-          <button class="user-btn">${portrait ? `<img src="${px(portrait)}">` : initials}</button>
+          <button class="user-btn">${portrait ? `<img src="${px(portrait)}">` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="#888"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`}</button>
           <span style="position:absolute;top:-3px;right:-3px;background:#e53935;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">👑</span>
         </div>
-        <span style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:.5px">МОЯ<br>СТРАНИЦА</span>
       </div>
       <button onclick="openAdminPanel()" style="background:#e53935;border:none;border-radius:8px;padding:5px 8px;color:white;font-size:13px;cursor:pointer;flex-shrink:0" title="Панель администратора">👑</button>
     </div>`;
@@ -1396,7 +1395,7 @@ function updateUserDisplay() {
   } else {
     const portrait = currentUser.data && currentUser.data['portrait_photo'];
     const initials = currentUser.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="openMyProfile()"><button class="user-btn">${portrait ? `<img src="${px(portrait)}">` : initials}</button><span style="font-size:11px;color:var(--gold);font-weight:700;letter-spacing:.5px">МОЯ<br>СТРАНИЦА</span></div>`;
+    el.innerHTML = `<div style="display:flex;align-items:center;cursor:pointer" onclick="openMyProfile()"><button class="user-btn">${portrait ? `<img src="${px(portrait)}">` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="#888"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`}</button></div>`;
     if (notifBtn) notifBtn.style.display = 'flex';
   }
 }
@@ -2359,7 +2358,8 @@ async function loginWithCode() {
         document.getElementById('ev-code-err').style.display='none';
         showLoad(false); return;
       } catch(e2) {
-        // Если отправка кода не работает — входим напрямую (данные уже подтверждены)
+        console.error('sendVerificationCode error:', e2);
+        // Fallback: если верификация недоступна — входим напрямую
         finishParticipantLogin(d);
         showLoad(false); return;
       }
