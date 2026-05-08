@@ -67,6 +67,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .like-btn.voted { background: rgba(245,197,24,.2); }
 .gallery-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
 .gallery-item { aspect-ratio: 1; overflow: hidden; cursor: pointer; position: relative; }
+.sel-circle { position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:2px solid white;background:rgba(0,0,0,.4);box-shadow:0 1px 3px rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:5;flex-shrink:0 }
+.select-mode .sel-circle { display:flex; }
+.sel-circle.checked { background:var(--gold);border-color:var(--gold); }
+.sel-circle.checked::after { content:'✓';color:#000;font-size:13px;font-weight:900;line-height:1 }
+.gallery-item.selected, .personal-gallery-item.selected { outline:2px solid var(--gold);outline-offset:-2px; }
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
 .gallery-owner { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,.85)); padding: 20px 6px 5px; font-size: 10px; font-weight: 600; }
 .gallery-upload-btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--card); border: 1.5px dashed var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
@@ -104,7 +109,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .detail-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: var(--gold); color: var(--black); border: none; border-radius: 10px; padding: 12px; font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 1px; cursor: pointer; margin-bottom: 10px; text-decoration: none; }
 .detail-btn.secondary { background: transparent; border: 1.5px solid var(--gold); color: var(--gold); }
 .personal-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; border-radius: 12px; overflow: hidden; }
-.personal-gallery-item { aspect-ratio: 1; overflow: hidden; cursor: pointer; }
+.personal-gallery-item { aspect-ratio: 1; overflow: hidden; cursor: pointer; position: relative; }
 .personal-gallery-item img { width: 100%; height: 100%; object-fit: cover; }
 .personal-gallery-add { aspect-ratio: 1; background: var(--card); border: 1.5px dashed var(--border); border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; font-size: 10px; color: var(--muted); font-weight: 600; }
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 400; align-items: flex-end; justify-content: center; max-width: 480px; margin: 0 auto; }
@@ -1606,9 +1611,10 @@ function renderGallery() {
     <button onclick="gallerySortBy='new';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='new'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='new'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='new'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🕐 Новые</button>
     <button onclick="gallerySortBy='likes';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='likes'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='likes'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='likes'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">❤️ Лайки</button>
     <button onclick="gallerySortBy='comments';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='comments'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='comments'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='comments'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">💬 Коммент.</button>
+    ${currentUser&&!currentUser.isGuest?`<button onclick="toggleSelectMode('gallery')" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${_selectMode==='gallery'?'var(--gold)':'var(--border)'};background:${_selectMode==='gallery'?'var(--gold-glow)':'var(--card)'};color:${_selectMode==='gallery'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='gallery'?'✓':'☐'}</button>`:''}
   </div>`;
 
-  el.innerHTML = uploadBtn + sortBar + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${sorted.map((ph,i)=>`
+  el.innerHTML = uploadBtn + sortBar + `<div id="gallery-grid" class="${_selectMode==='gallery'?'select-mode':''}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${sorted.map((ph,i)=>`
     <div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">
       ${ph.photo_url.startsWith('__FOLDER__') ? `
         <div style="aspect-ratio:1;border-radius:0;position:relative;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px;cursor:pointer" onclick="window.open('${ph.photo_url.slice(10)}','_blank')">
@@ -1617,7 +1623,7 @@ function renderGallery() {
           <div style="font-size:9px;color:var(--muted);text-align:center">Нажмите чтобы открыть</div>
           ${currentUser&&!currentUser.isGuest&&String(ph.owner_row_id)===String(currentUser.row)?'<div style="position:absolute;top:6px;left:6px;background:var(--gold);color:var(--black);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">МОЁ</div>':''}
         </div>` : `
-        <div class="gallery-item" style="aspect-ratio:1;border-radius:0;position:relative" onclick="openLb(${i})">
+        <div class="gallery-item${_selectMode==='gallery'&&_selected.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;border-radius:0;position:relative" onclick="_selectMode==='gallery'?(toggleSelectItem('${ph.photo_url}'),this.classList.toggle('selected',_selected.has('${ph.photo_url}'))):openLb(${i})">
           <img src="${px(ph.photo_url)}" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover">
           <div class="gallery-owner">${ph.owner_name||''}</div>
           ${currentUser&&!currentUser.isGuest&&String(ph.owner_row_id)===String(currentUser.row)?'<div style="position:absolute;top:6px;left:6px;background:var(--gold);color:var(--black);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px;pointer-events:none">МОЁ</div>':''}
@@ -1725,15 +1731,15 @@ function openDetail(row) {
         const lim2 = parseInt(p['photo_limit']) || 0;
         const lt2 = lim2>0?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}/${lim2}</span>`:myUploads2.length?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}</span>`:'';
         return `
-          <div class="section-title" style="margin-top:14px">Мои фото${lt2}</div>
+          <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото${lt2}</span>${isMe?`<button onclick="toggleSelectMode('uploads')" style="background:none;border:1px solid var(--border);color:${_selectMode==='uploads'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='uploads'?'✓ Выбор':'☐'}</button>`:''}</span></div>
           <div class="personal-gallery">
-            ${myUploads2.map(ph=>`<div class="personal-gallery-item" onclick="openUploadedPhoto('${ph.photo_url}','${p['ФИО']}',${ph._row})"><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
+            ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selected.has(ph.photo_url)?' selected':''}" onclick="_selectMode==='uploads'?toggleSelectItem('${ph.photo_url}'):openUploadedPhoto('${ph.photo_url}','${p['ФИО']}',${ph._row})"><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="startUpload('personal_gallery')"><span style="font-size:20px">+</span><span>Загрузить</span></div>`:''}
             ${!myUploads2.length&&!isMe?'<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">Нет фото</div>':''}
           </div>
-          <div class="section-title" style="margin-top:14px">Избранное</div>
+          <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&purls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
           <div class="personal-gallery">
-            ${purls.map((url,i)=>`<div class="personal-gallery-item" onclick="openPersonalPhoto('${url}','${p['ФИО']}')"><img src="${px(url)}" loading="lazy"></div>`).join('')}
+            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selected.has(url)?' selected':''}" onclick="_selectMode==='favorites'?toggleSelectItem('${url}'):openPersonalPhoto('${url}','${p['ФИО']}')"><img src="${px(url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="openGalleryPickerForFav()"><span style="font-size:20px">★</span><span>Добавить</span></div>`:''}
             ${!purls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
           </div>`;
@@ -2229,6 +2235,133 @@ async function removeFromCollection() {
 }
 
 // TABS
+
+// ── BULK SELECT MODE ──
+let _selectMode = null;
+let _selectedItems = new Set();
+
+function toggleSelectMode(mode) {
+  if (_selectMode === mode) {
+    _selectMode = null;
+    _selectedItems.clear();
+  } else {
+    _selectMode = mode;
+    _selectedItems.clear();
+  }
+  renderSelectBar();
+  if (mode === 'gallery') renderGallery();
+  else if (currentRecord) openDetail(currentRecord._row);
+}
+
+// Долгое нажатие для мобильных
+let _longPressTimer = null;
+function startLongPress(el, mode, key) {
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    if (!_selectMode) { toggleSelectMode(mode); }
+    toggleSelectItem(key);
+    // Обновить кружок
+    const circle = el.querySelector('.sel-circle');
+    if (circle) circle.classList.toggle('checked', _selectedItems.has(key));
+    el.classList.toggle('selected', _selectedItems.has(key));
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, 500);
+}
+function cancelLongPress() {
+  if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+}
+
+function toggleSelectItem(key) {
+  if (_selectedItems.has(key)) _selectedItems.delete(key);
+  else _selectedItems.add(key);
+  renderSelectBar();
+}
+
+function renderSelectBar() {
+  let bar = document.getElementById('select-action-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'select-action-bar';
+    bar.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;max-width:480px;margin:0 auto;background:rgba(10,10,10,.97);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;z-index:200';
+    document.body.appendChild(bar);
+  }
+  if (!_selectMode) { bar.style.display='none'; return; }
+  bar.style.display='flex';
+  const n = _selectedItems.size;
+  bar.innerHTML = `
+    <div style="flex:1;font-size:13px;font-weight:700;color:var(--gold)">Выбрано: ${n}</div>
+    <button onclick="bulkDownload()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">⬇ Скачать</button>
+    ${_selectMode==='uploads'?`<button onclick="bulkDelete()" style="background:none;border:1px solid #e53935;color:#ff5555;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🗑 Удалить</button>`:''}
+    ${_selectMode==='favorites'?`<button onclick="bulkRemoveFav()" style="background:none;border:1px solid var(--gold);color:var(--gold);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">★ Убрать</button>`:''}
+    <button onclick="toggleSelectMode(_selectMode)" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer">✕</button>
+  `;
+}
+
+async function bulkDownload() {
+  if (!_selectedItems.size) { toast('Ничего не выбрано'); return; }
+  const urls = [..._selectedItems];
+  toast(`Скачивание ${urls.length} фото...`);
+  _selectMode = null; _selectedItems.clear(); renderSelectBar();
+  for (let i = 0; i < urls.length; i++) {
+    await new Promise(resolve => {
+      const url = urls[i];
+      let dlUrl = url.includes('cloudinary.com') ? url.replace('/upload/', '/upload/fl_attachment/') : url;
+      // Скачать через fetch → blob → ссылка
+      fetch(dlUrl)
+        .then(r => r.blob())
+        .then(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'dgr2026_' + (i+1) + '.jpg';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          resolve();
+        })
+        .catch(() => {
+          // Fallback — открыть в новой вкладке
+          window.open(dlUrl, '_blank');
+          resolve();
+        });
+    });
+    await new Promise(r => setTimeout(r, 500));
+  }
+}
+
+async function bulkDelete() {
+  if (!_selectedItems.size) return;
+  showConfirm(`Удалить ${_selectedItems.size} фото?`, async () => {
+    showLoad(true);
+    for (const url of _selectedItems) {
+      const ph = gallery.find(g => g.photo_url === url && String(g.owner_row_id) === String(currentUser.row));
+      if (ph) await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+    }
+    _selectMode = null; _selectedItems.clear(); renderSelectBar();
+    toast('Фото удалены');
+    await loadData(true); renderAll();
+    if (currentRecord) openDetail(currentRecord._row);
+    showLoad(false);
+  }, 'Удалить фото');
+}
+
+async function bulkRemoveFav() {
+  if (!_selectedItems.size) return;
+  showLoad(true);
+  const freshMe = participants.find(p => String(p._row) === String(currentUser.row));
+  let purls = gpurls(freshMe || currentUser.data || {});
+  purls = purls.filter(u => !_selectedItems.has(u));
+  await apiPost({action:'updateParticipant', row:currentUser.row, fields:{gallery_urls:JSON.stringify(purls)}});
+  _selectMode = null; _selectedItems.clear(); renderSelectBar();
+  toast('Убрано из избранного');
+  await loadData(true);
+  const me = participants.find(p => String(p._row) === String(currentUser.row));
+  if (me) { currentUser.data = me; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
+  renderAll();
+  if (currentRecord) openDetail(currentRecord._row);
+  showLoad(false);
+}
+
 const TAB_ICONS = ['head','bike','bowtie','camera','info'];
 const TAB_TITLES = ['УЧАСТНИКИ','ТОП БАЙК','ТОП СТИЛЬ','ГАЛЕРЕЯ','О НАС'];
 function initNavIcons() {
