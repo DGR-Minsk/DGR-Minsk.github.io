@@ -1424,18 +1424,18 @@ function gpurls(p) { try { return JSON.parse(p['gallery_urls']||'[]'); } catch {
 
 // MEMBERS
 const BIKE_STYLES = [
-  { name: 'Cafe Racer',            img: 'https://gentlemansride.com/img/style-guide/cafe-racer.png' },
-  { name: 'Classic',               img: 'https://gentlemansride.com/img/style-guide/classic.png' },
-  { name: 'Modern Classic',        img: 'https://gentlemansride.com/img/style-guide/modern-classic.png' },
-  { name: 'Chopper',               img: 'https://gentlemansride.com/img/style-guide/chopper.png' },
-  { name: 'Brat Style',            img: 'https://gentlemansride.com/img/style-guide/brat-style.png' },
-  { name: 'Bobber',                img: 'https://gentlemansride.com/img/style-guide/bobber.png' },
-  { name: 'Scooter',               img: 'https://gentlemansride.com/img/style-guide/scooter.png' },
-  { name: 'Tracker',               img: 'https://gentlemansride.com/img/style-guide/tracker.png' },
-  { name: 'Scrambler',             img: 'https://gentlemansride.com/img/style-guide/scrambler.png' },
-  { name: 'Side Car',              img: 'https://gentlemansride.com/img/style-guide/side-car.png' },
-  { name: 'Classic Cruiser',       img: 'https://gentlemansride.com/img/style-guide/classic-cruiser.png' },
-  { name: 'Modern Classic Electric', img: 'https://gentlemansride.com/img/style-guide/modern-classic-electric.png' },
+  { name: 'Cafe Racer',            img: 'https://dgr-minsk.github.io/styles/cafe-racer.svg' },
+  { name: 'Classic',               img: 'https://dgr-minsk.github.io/styles/classic.svg' },
+  { name: 'Modern Classic',        img: 'https://dgr-minsk.github.io/styles/modern-classic.svg' },
+  { name: 'Chopper',               img: 'https://dgr-minsk.github.io/styles/chopper.svg' },
+  { name: 'Brat Style',            img: 'https://dgr-minsk.github.io/styles/brat-style.svg' },
+  { name: 'Bobber',                img: 'https://dgr-minsk.github.io/styles/bobber.svg' },
+  { name: 'Scooter',               img: 'https://dgr-minsk.github.io/styles/scooter.svg' },
+  { name: 'Tracker',               img: 'https://dgr-minsk.github.io/styles/tracker.svg' },
+  { name: 'Scrambler',             img: 'https://dgr-minsk.github.io/styles/scrambler.svg' },
+  { name: 'Side Car',              img: 'https://dgr-minsk.github.io/styles/side-car.svg' },
+  { name: 'Classic Cruiser',       img: 'https://dgr-minsk.github.io/styles/classic-cruiser.svg' },
+  { name: 'Modern Classic Electric', img: 'https://dgr-minsk.github.io/styles/electric.svg' },
 ];
 let memberFilters = { brand: '', style: '' };
 
@@ -1665,7 +1665,7 @@ function openDetail(row) {
         ${isMe ? `<button onclick="logout()" title="Выйти" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;align-self:flex-start">↪ Выход</button>` : ''}
       </div>
     </div>
-    ${(p['bike_style']||isMe)?`<div style="padding:0 16px 10px">${p['bike_style']?`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-glow);border:1px solid var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--gold)">${p['bike_style']}${isMe?`<button onclick="openStylePicker()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:11px;padding:0;line-height:1">✏</button>`:''}</span>`:isMe?`<button onclick="openStylePicker()" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">+ Стиль байка</button>`:''}</div>`:''}
+    ${(p['bike_style']||isMe)?`<div style="padding:0 16px 10px">${p['bike_style']?`<span onclick="openStyleViewer(${isMe})" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-glow);border:1px solid var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--gold);cursor:pointer">${p['bike_style']}${isMe?` ✏`:' 👁'}</span>`:isMe?`<button onclick="openStylePicker()" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">+ Стиль байка</button>`:''}</div>`:''}
     <div class="section-title" style="padding:0 16px 0;margin-top:0;display:flex;align-items:center;justify-content:space-between">
         <span>Заводское фото байка</span>
         ${isMe?`<button onclick="openFactoryPhotoEdit()" style="background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:4px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;margin-right:16px">✏ Изменить</button>`:''}
@@ -3130,6 +3130,30 @@ const SPEC_FIELDS = [
 ];
 
 // ── BIKE STYLE PICKER ──
+function openStyleViewer(canSelect) {
+  const body = document.getElementById('style-picker-options');
+  const current = currentRecord?.['bike_style'] || currentUser?.data?.['bike_style'] || '';
+  if (body) {
+    body.innerHTML = BIKE_STYLES.map(s => {
+      const isActive = s.name === current;
+      const emojis = {'Cafe Racer':'🏁','Classic':'🏛️','Modern Classic':'⚙️','Chopper':'🦅','Brat Style':'🎌','Bobber':'💈','Scooter':'🛵','Tracker':'🏔️','Scrambler':'🌿','Side Car':'👥','Classic Cruiser':'✨','Modern Classic Electric':'⚡'};
+      const emoji = emojis[s.name] || '🏍';
+      const clickAttr = canSelect ? `onclick="selectBikeStyle('${s.name}')"` : '';
+      const cursor = canSelect ? 'cursor:pointer' : 'cursor:default';
+      return `<div ${clickAttr} style="${cursor};border:2px solid ${isActive?'var(--gold)':'var(--border)'};border-radius:12px;overflow:hidden;background:var(--card)${!canSelect&&isActive?';box-shadow:0 0 0 2px var(--gold)':''}">
+        <div style="background:${isActive?'rgba(245,197,24,0.1)':'#111'};display:flex;align-items:center;justify-content:center;height:80px">
+          <img src="${s.img}" alt="" style="max-height:72px;max-width:100%;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <span style="font-size:36px;display:none">${emoji}</span>
+        </div>
+        <div style="padding:8px;font-size:11px;font-weight:${isActive?'800':'600'};color:${isActive?'var(--gold)':'var(--text)'};text-align:center;line-height:1.3">${s.name}${isActive?' ✓':''}</div>
+      </div>`;
+    }).join('');
+  }
+  // Обновить заголовок
+  const title = document.querySelector('#style-picker-modal .modal-title');
+  if (title) title.textContent = canSelect ? 'Стиль байка' : 'Стили мотоциклов';
+  document.getElementById('style-picker-modal').classList.add('open');
+}
 function openStylePicker() {
   if (!currentUser || currentUser.isGuest) return;
   const body = document.getElementById('style-picker-options');
@@ -3137,11 +3161,14 @@ function openStylePicker() {
   if (body) {
     body.innerHTML = BIKE_STYLES.map(s => {
       const isActive = s.name === current;
+      const emojis = {'Cafe Racer':'🏁','Classic':'🏛️','Modern Classic':'⚙️','Chopper':'🦅','Brat Style':'🎌','Bobber':'💈','Scooter':'🛵','Tracker':'🏔️','Scrambler':'🌿','Side Car':'👥','Classic Cruiser':'✨','Modern Classic Electric':'⚡'};
+      const emoji = emojis[s.name] || '🏍';
       return `<div onclick="selectBikeStyle('${s.name}')" style="cursor:pointer;border:2px solid ${isActive?'var(--gold)':'var(--border)'};border-radius:12px;overflow:hidden;background:var(--card)">
-        <div style="background:#111;display:flex;align-items:center;justify-content:center;height:90px">
-          <img src="${s.img}" alt="${s.name}" style="max-height:80px;max-width:100%;object-fit:contain" onerror="this.style.display='none'">
+        <div style="background:${isActive?'rgba(245,197,24,0.1)':'#111'};display:flex;align-items:center;justify-content:center;height:80px">
+          <img src="${s.img}" alt="" style="max-height:72px;max-width:100%;object-fit:contain" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <span style="font-size:36px;display:none">${emoji}</span>
         </div>
-        <div style="padding:8px;font-size:12px;font-weight:${isActive?'800':'600'};color:${isActive?'var(--gold)':'var(--text)'};text-align:center;line-height:1.3">${s.name}</div>
+        <div style="padding:8px;font-size:11px;font-weight:${isActive?'800':'600'};color:${isActive?'var(--gold)':'var(--text)'};text-align:center;line-height:1.3">${s.name}</div>
       </div>`;
     }).join('');
   }
