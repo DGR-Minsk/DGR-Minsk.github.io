@@ -257,7 +257,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
       <div class="divider">или</div>
       <div style="display:flex;gap:10px;margin-bottom:8px">
         <button onclick="showGuestForm()" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
-          <span style="font-size:13px;font-weight:700;color:var(--text)">👁 Гость</span>
+          <span style="font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="7" cy="13" r="3"/><path d="M7 17c-3 0-5 1.3-5 2.5V21h10v-1.5C12 18.3 10 17 7 17z"/><rect x="10" y="2" width="12" height="8" rx="2"/><polygon points="12,10 10,13 14,10"/><circle cx="13.5" cy="6" r="1"/><circle cx="16" cy="6" r="1"/><circle cx="18.5" cy="6" r="1"/></svg> Гость</span>
           <span style="font-size:10px;color:var(--muted);line-height:1.3;text-align:center">Просмотр, лайки и комментарии</span>
         </button>
         <button onclick="showPhotographerForm()" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
@@ -370,7 +370,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
     <button class="modal-btn" onclick="lbBtnAction(this,modalLogin)">ВОЙТИ КАК УЧАСТНИК</button>
     <div class="divider">или</div>
     <div id="modal-guest-toggle" style="margin-bottom:4px">
-      <button class="modal-btn ghost" style="font-size:12px;width:100%" onclick="document.getElementById('modal-guest-form').style.display='block';document.getElementById('modal-guest-toggle').style.display='none'">👁 Войти как гость</button>
+      <button class="modal-btn ghost" style="font-size:12px;width:100%" onclick="document.getElementById('modal-guest-form').style.display='block';document.getElementById('modal-guest-toggle').style.display='none'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="7" cy="13" r="3"/><path d="M7 17c-3 0-5 1.3-5 2.5V21h10v-1.5C12 18.3 10 17 7 17z"/><rect x="10" y="2" width="12" height="8" rx="2"/><polygon points="12,10 10,13 14,10"/><circle cx="13.5" cy="6" r="1"/><circle cx="16" cy="6" r="1"/><circle cx="18.5" cy="6" r="1"/></svg> Войти как гость</button>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px;line-height:1.4">Просмотр, лайки и комментарии</div>
     </div>
     <div id="modal-guest-form" style="display:none">
@@ -404,7 +404,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
   </div>
   <div class="lightbox-actions" style="flex-direction:column;gap:8px">
     <div id="lb-btns" style="display:flex;gap:8px;width:100%;flex-wrap:wrap">
-      <a id="lb-dl" href="#" download style="display:none;flex:1;min-width:100px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;align-items:center;justify-content:center">⬇ Скачать</a>
+      <button id="lb-dl" onclick="downloadPhoto()" style="display:none;flex:1;min-width:100px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer;text-align:center">⬇ Скачать</button>
       <button id="lb-save" onclick="lbBtnAction(this,saveToPersonal)" style="display:none;flex:1;min-width:100px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer">★ В избранное</button>
       <button id="lb-remove-col" onclick="lbBtnAction(this,removeFromCollection)" style="display:none;flex:1;min-width:100px;background:var(--card);border:1px solid var(--gold);color:var(--gold);border-radius:10px;padding:11px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer">★ Убрать из избранного</button>
       <button id="lb-update" onclick="lbUpdateContestPhoto()" style="display:none;flex:1;min-width:100px;background:var(--card);border:1px solid var(--gold);color:var(--gold);border-radius:10px;padding:11px;font-family:'Inter',sans-serif;font-size:12px;font-weight:700;cursor:pointer">📷 Обновить фото</button>
@@ -1423,7 +1423,20 @@ function gvsi(p) { const v=p['voted_style_ids']; return v?String(v).split(',').m
 function gpurls(p) { try { return JSON.parse(p['gallery_urls']||'[]'); } catch { return []; } }
 
 // MEMBERS
-const BIKE_STYLES = ['Cafe Racer','Scrambler','Bobber','Classic','Custom','Sport-Classic','Tracker','Modern','Other'];
+const BIKE_STYLES = [
+  { name: 'Cafe Racer',            img: 'https://gentlemansride.com/img/style-guide/cafe-racer.png' },
+  { name: 'Classic',               img: 'https://gentlemansride.com/img/style-guide/classic.png' },
+  { name: 'Modern Classic',        img: 'https://gentlemansride.com/img/style-guide/modern-classic.png' },
+  { name: 'Chopper',               img: 'https://gentlemansride.com/img/style-guide/chopper.png' },
+  { name: 'Brat Style',            img: 'https://gentlemansride.com/img/style-guide/brat-style.png' },
+  { name: 'Bobber',                img: 'https://gentlemansride.com/img/style-guide/bobber.png' },
+  { name: 'Scooter',               img: 'https://gentlemansride.com/img/style-guide/scooter.png' },
+  { name: 'Tracker',               img: 'https://gentlemansride.com/img/style-guide/tracker.png' },
+  { name: 'Scrambler',             img: 'https://gentlemansride.com/img/style-guide/scrambler.png' },
+  { name: 'Side Car',              img: 'https://gentlemansride.com/img/style-guide/side-car.png' },
+  { name: 'Classic Cruiser',       img: 'https://gentlemansride.com/img/style-guide/classic-cruiser.png' },
+  { name: 'Modern Classic Electric', img: 'https://gentlemansride.com/img/style-guide/modern-classic-electric.png' },
+];
 let memberFilters = { brand: '', style: '' };
 
 function getBrand(p) {
@@ -1728,6 +1741,7 @@ function openDetail(row) {
     </div>`;
   document.getElementById('detail-view').style.display='block';
   document.getElementById('detail-view').scrollTop=0;
+  history.pushState({detail: true}, '');
 }
 
 function openMyProfile() { if (currentUser&&!currentUser.isGuest) openDetail(currentUser.row); else openAuthModal('Войдите как участник'); }
@@ -2011,6 +2025,7 @@ function openLb(i) {
   lbImages=sorted.map(ph=>({url:ph.photo_url,name:ph.owner_name,sub:'',ownerRow:ph.owner_row_id,galleryRow:ph._row,context:'gallery'}));
   lbIndex=i; showLb();
   document.getElementById('lightbox').classList.add('open');
+  history.pushState({lightbox:true},'');
 }
 function openUploadedPhoto(url, name, galleryRow) {
   lbImages = [{
@@ -2024,6 +2039,7 @@ function openUploadedPhoto(url, name, galleryRow) {
   lbIndex = 0;
   showLb();
   document.getElementById('lightbox').classList.add('open');
+  history.pushState({lightbox:true},'');
 }
 function openPersonalPhoto(url, name) {
   const ownGalleryItem = gallery.find(ph => ph.photo_url === url && String(ph.owner_row_id) === String(currentUser&&currentUser.row));
@@ -2040,6 +2056,7 @@ function openPersonalPhoto(url, name) {
   lbIndex = 0;
   showLb();
   document.getElementById('lightbox').classList.add('open');
+  history.pushState({lightbox:true},'');
 }
 function openPortrait(el) {
   const url = el.dataset.url;
@@ -2049,11 +2066,13 @@ function openPortrait(el) {
   lbIndex = 0;
   showLb();
   document.getElementById('lightbox').classList.add('open');
+  history.pushState({lightbox:true},'');
 }
 function openLbSingle(url,name,sub,photoType,context) {
   if (!url) return;
   lbImages=[{url,name,sub,photoType,context:context||photoType||'single',ownerRow:photoType?currentUser&&currentUser.row:null}]; lbIndex=0; showLb();
   document.getElementById('lightbox').classList.add('open');
+  history.pushState({lightbox:true},'');
 }
 function showLb() {
   const item=lbImages[lbIndex]; if (!item) return;
@@ -2078,7 +2097,7 @@ function showLb() {
   const dl = document.getElementById('lb-dl');
   const showDl = ['gallery','top','personal','uploaded'].includes(ctx);
   dl.style.display = showDl ? 'flex' : 'none';
-  if (showDl) dl.href = item.url;
+  // URL хранится в lbCurrentPhoto.url для downloadPhoto()
 
   // В избранное — галерея/топ, не своё, ещё не в избранном
   const alreadyInCollection = loggedIn && currentUser.data && gpurls(currentUser.data).includes(item.url);
@@ -2387,7 +2406,7 @@ async function confirmParticipantEmailCode() {
   if (vres && vres.error) { errEl.textContent=vres.error; errEl.style.display='block'; showLoad(false); return; }
   // Сохранить как верифицированный
   const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
-  verified[_pendingLoginEmail.toLowerCase()] = { name: d?.participant?.['ФИО']||'', ts: Date.now() };
+  verified[_pendingLoginEmail.toLowerCase()] = { name: _pendingLoginData?.participant?.['ФИО']||'', ts: Date.now() };
   localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
   finishParticipantLogin(_pendingLoginData);
   showLoad(false);
@@ -2731,6 +2750,37 @@ function lbUpdateContestPhoto() {
   if (!lbCurrentPhoto || !lbCurrentPhoto.photoType) return;
   closeLightbox();
   startUpload(lbCurrentPhoto.photoType);
+}
+window.addEventListener('popstate', (e) => {
+  if (document.getElementById('lightbox').classList.contains('open')) {
+    closeLightbox();
+  } else if (document.getElementById('detail-view').style.display === 'block') {
+    closeDetail();
+    history.pushState(null, '');
+  }
+});
+function downloadPhoto() {
+  if (!lbCurrentPhoto) return;
+  const url = lbCurrentPhoto.url;
+  try {
+    const btn = document.getElementById('lb-dl');
+    if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px;display:inline-block;vertical-align:middle"></span>';}
+    // Для Cloudinary — добавить fl_attachment для принудительного скачивания
+    let dlUrl = url;
+    if (url.includes('cloudinary.com')) {
+      dlUrl = url.replace('/upload/', '/upload/fl_attachment/');
+    }
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = 'dgr2026_' + Date.now() + '.jpg';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if(btn){btn.disabled=false;btn.innerHTML='⬇ Скачать';}
+  } catch(e) {
+    toast('Ошибка скачивания');
+  }
 }
 function lbBtnAction(btn, fn) {
   const prev = btn.innerHTML;
@@ -3083,11 +3133,17 @@ const SPEC_FIELDS = [
 function openStylePicker() {
   if (!currentUser || currentUser.isGuest) return;
   const body = document.getElementById('style-picker-options');
+  const current = currentUser.data?.['bike_style'] || '';
   if (body) {
-    const current = currentUser.data?.['bike_style'] || '';
-    body.innerHTML = BIKE_STYLES.map(s =>
-      `<button onclick="selectBikeStyle('${s}')" style="background:${s===current?'var(--gold)':'var(--card)'};border:1.5px solid ${s===current?'var(--gold)':'var(--border)'};color:${s===current?'var(--black)':'var(--text)'};border-radius:999px;padding:8px 16px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer">${s}</button>`
-    ).join('');
+    body.innerHTML = BIKE_STYLES.map(s => {
+      const isActive = s.name === current;
+      return `<div onclick="selectBikeStyle('${s.name}')" style="cursor:pointer;border:2px solid ${isActive?'var(--gold)':'var(--border)'};border-radius:12px;overflow:hidden;background:var(--card)">
+        <div style="background:#111;display:flex;align-items:center;justify-content:center;height:90px">
+          <img src="${s.img}" alt="${s.name}" style="max-height:80px;max-width:100%;object-fit:contain" onerror="this.style.display='none'">
+        </div>
+        <div style="padding:8px;font-size:12px;font-weight:${isActive?'800':'600'};color:${isActive?'var(--gold)':'var(--text)'};text-align:center;line-height:1.3">${s.name}</div>
+      </div>`;
+    }).join('');
   }
   document.getElementById('style-picker-modal').classList.add('open');
 }
@@ -3410,8 +3466,8 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal-sheet">
     <div class="modal-title">Стиль байка</div>
     <div class="modal-sub">Выберите стиль вашего мотоцикла — это поможет другим участникам вас найти.</div>
-    <div id="style-picker-options" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
-    <button class="modal-btn ghost" onclick="document.getElementById('style-picker-modal').classList.remove('open')">Отмена</button>
+    <div id="style-picker-options" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px"></div>
+    <button class="modal-btn ghost" onclick="document.getElementById('style-picker-modal').classList.remove('open')" style="display:none">Отмена</button>
   </div>
 </div>
 <!-- PHOTOGRAPHER CABINET -->
@@ -3444,9 +3500,9 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <div class="modal-sub" id="auth-choice-reason" style="margin-bottom:12px"></div>
     <div id="auth-choice-main">
-      <button class="modal-btn" style="background:transparent;border:1.5px solid var(--gold);color:var(--gold)" onclick="authChoiceSelectGuest()">👁 Гость</button>
+      <button class="modal-btn" style="background:transparent;border:1.5px solid var(--gold);color:var(--gold)" onclick="authChoiceSelectGuest()"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="7" cy="13" r="3"/><path d="M7 17c-3 0-5 1.3-5 2.5V21h10v-1.5C12 18.3 10 17 7 17z"/><rect x="10" y="2" width="12" height="8" rx="2"/><polygon points="12,10 10,13 14,10"/><circle cx="13.5" cy="6" r="1"/><circle cx="16" cy="6" r="1"/><circle cx="18.5" cy="6" r="1"/></svg> Гость</button>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:8px">Просмотр, лайки и комментарии</div>
-      <button class="modal-btn" style="margin-top:0" onclick="authChoiceSelectParticipant()">🏍 Участник</button>
+      <button class="modal-btn" style="margin-top:0;display:flex;align-items:center;justify-content:center;gap:8px" onclick="authChoiceSelectParticipant()"><span id="auth-choice-bike-icon"></span>Участник</button>
       <button class="modal-btn ghost" style="margin-top:8px;font-size:12px" onclick="authChoiceSelectPhotographer()">📷 Фотограф</button>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:8px">Загрузка фото в галерею + права гостя</div>
       <button class="modal-btn ghost" style="margin-top:0;font-size:11px;padding:9px;color:var(--muted);border-color:var(--border)" onclick="closeAuthChoice();enterViewOnly()">👀 Зритель — только просмотр страниц</button>
