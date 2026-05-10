@@ -1571,11 +1571,25 @@ async function doVote(targetRow, type, btn) {
   // Allow unvote
   const action = alreadyVoted ? 'unvote' : 'vote';
   if (!alreadyVoted && myVoted.length>=3) { toast('Использованы все 3 голоса'); return; }
+  const prevHtml = btn.innerHTML;
   btn.disabled=true;
+  btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px;display:inline-block;vertical-align:middle"></span>';
   const d = await apiPost({action:'vote', voterRow:currentUser.row, targetRow, type, unvote:alreadyVoted});
-  if (d.error) { toast(d.error); btn.disabled=false; return; }
-  toast(alreadyVoted ? 'Голос отменён' : 'Голос засчитан! ❤️');
-  await loadData();
+  if (d.error) { toast(d.error); btn.disabled=false; btn.innerHTML=prevHtml; return; }
+  toast(alreadyVoted ? 'Голос отменён' : 'Голос засчитан! 🏆');
+  await loadData(true);
+  // Обновить currentUser.data из свежих данных — ОБЯЗАТЕЛЬНО до updateLbLikeBtn
+  const meNow = participants.find(p => String(p._row) === String(currentUser.row));
+  if (meNow) { currentUser.data = meNow; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
+  btn.disabled=false;
+  // Обновить текст кнопки
+  if (btn.id === 'lb-like') {
+    updateLbLikeBtn();
+  } else {
+    const nowVoted = (type==='bike'?gvbi(currentUser.data||{}):gvsi(currentUser.data||{})).includes(String(targetRow));
+    btn.innerHTML = nowVoted ? '🏆 Отменить голос' : '🏆 Голосовать';
+    btn.className = btn.className.replace(/\bvoted\b/,'').trim() + (nowVoted ? ' voted' : '');
+  }
   if (type==='bike') renderTopBike(); else renderTopStyle();
   renderMembers();
 }
@@ -1627,7 +1641,7 @@ function renderGallery() {
           <div style="font-size:9px;color:var(--muted);text-align:center">Нажмите чтобы открыть</div>
           ${currentUser&&!currentUser.isGuest&&String(ph.owner_row_id)===String(currentUser.row)?'<div style="position:absolute;top:6px;left:6px;background:var(--gold);color:var(--black);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">МОЁ</div>':''}
         </div>` : `
-        <div class="gallery-item${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;border-radius:0;position:relative" onclick="handleGalleryClick(this,'gallery','${ph.photo_url}',()=>openLb(${i}))" ontouchstart="startLongPress(this,'gallery','${ph.photo_url}');if(!_selectMode){}else{event.preventDefault()}" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" oncontextmenu="event.preventDefault();return false">
+        <div class="gallery-item${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;border-radius:0;position:relative" onclick="handleGalleryClick(this,'gallery','${ph.photo_url}',()=>openLb(${i}))" data-lpkey="${ph.photo_url}" ontouchstart="startLongPress(this,'gallery','${ph.photo_url}');if(!_selectMode){}else{event.preventDefault()}" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" oncontextmenu="event.preventDefault();return false">
           <div class="sel-circle${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div>
           <img src="${px(ph.photo_url)}" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover">
           <div class="gallery-owner">${ph.owner_name||''}</div>
@@ -1738,13 +1752,13 @@ function openDetail(row) {
         return `
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото${lt2}</span>${isMe?`<button onclick="toggleSelectMode('uploads')" style="background:none;border:1px solid var(--border);color:${_selectMode==='uploads'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='uploads'?'✓ Выбор':'☐'}</button>`:''}</span></div>
           <div class="personal-gallery${_selectMode==='uploads'?' in-select-mode':''}" data-select-mode="uploads">
-            ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
+            ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="startUpload('personal_gallery')"><span style="font-size:20px">+</span><span>Загрузить</span></div>`:''}
             ${!myUploads2.length&&!isMe?'<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">Нет фото</div>':''}
           </div>
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&purls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
           <div class="personal-gallery${_selectMode==='favorites'?' in-select-mode':''}" data-select-mode="favorites">
-            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
+            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="openGalleryPickerForFav()"><span style="font-size:20px">★</span><span>Добавить</span></div>`:''}
             ${!purls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
           </div>`;
@@ -2142,6 +2156,11 @@ function showLb() {
   const isOwnPhoto2 = currentUser && !currentUser.isGuest && item.ownerRow && String(item.ownerRow)===String(currentUser.row);
   const showLike = currentUser && !currentUser.isGuest && !isOwnPhoto2 && ['gallery','top'].includes(ctx);
   if (lbLike) { lbLike.style.display = showLike ? 'flex' : 'none'; }
+  // Синхронизировать currentUser.data перед показом статуса голосования
+  if (currentUser && !currentUser.isGuest && ctx === 'top') {
+    const meSync = participants.find(p => String(p._row) === String(currentUser.row));
+    if (meSync) { currentUser.data = meSync; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
+  }
   updateLbLikeBtn();
 }
 
@@ -2982,13 +3001,25 @@ function downloadPhoto() {
 async function lbToggleLike() {
   if (!lbCurrentPhoto) return;
   if (!currentUser) { openAuthChoice('Войдите чтобы поставить лайк'); return; }
-  if (currentUser.isGuest && lbCurrentPhoto.context === 'top') { openAuthChoice('Голосовать могут только участники'); return; }
-  const url = lbCurrentPhoto.url;
-  const ownerRow = lbCurrentPhoto.ownerRow || 0;
-  const isTop = lbCurrentPhoto.context === 'top';
   const btn = document.getElementById('lb-like');
-  await toggleLike(url, ownerRow, btn, isTop);
-  updateLbLikeBtn();
+  const isTop = lbCurrentPhoto.context === 'top';
+  if (isTop) {
+    // Для TOP — использовать систему голосования doVote
+    if (currentUser.isGuest) { openAuthChoice('Голосовать могут только участники'); return; }
+    const ownerRow = lbCurrentPhoto.ownerRow;
+    if (!ownerRow) { toast('Не удалось определить участника'); return; }
+    // Определить тип — bike или style
+    const p = participants.find(p => String(p._row) === String(ownerRow));
+    if (!p) { toast('Участник не найден'); return; }
+    const type = p['contest_bike'] === lbCurrentPhoto.url ? 'bike' : 'style';
+    await doVote(ownerRow, type, btn);
+    updateLbLikeBtn();
+  } else {
+    // Для галереи — обычный лайк
+    const url = lbCurrentPhoto.url;
+    const ownerRow = lbCurrentPhoto.ownerRow || 0;
+    await toggleLike(url, ownerRow, btn, false);
+  }
 }
 
 function updateLbLikeBtn() {
@@ -2997,26 +3028,35 @@ function updateLbLikeBtn() {
   if (!btn || btn.style.display === 'none') return;
   const url = lbCurrentPhoto.url;
   const isTop = lbCurrentPhoto.context === 'top';
-  const liked = hasLiked(url);
-  const count = getLikes(url).length;
   if (isTop) {
-    btn.innerHTML = liked ? '🏆 Отменить голос' : '🏆 Голосовать';
-    btn.style.borderColor = liked ? '#e53935' : 'var(--gold)';
-    btn.style.color = liked ? '#ff5555' : 'var(--gold)';
-    btn.style.background = liked ? 'none' : 'var(--gold-glow)';
+    // Проверить через систему голосования (votes)
+    const ownerRow = lbCurrentPhoto.ownerRow;
+    const p = ownerRow ? participants.find(p => String(p._row) === String(ownerRow)) : null;
+    const type = p && p['contest_bike'] === url ? 'bike' : 'style';
+    const myVoted = currentUser && !currentUser.isGuest ? (type==='bike' ? gvbi(currentUser.data||{}) : gvsi(currentUser.data||{})) : [];
+    const voted = myVoted.includes(String(ownerRow));
+    btn.innerHTML = voted ? '🏆 Отменить голос' : '🏆 Голосовать';
+    btn.style.borderColor = voted ? '#e53935' : 'var(--gold)';
+    btn.style.color = voted ? '#ff5555' : 'var(--gold)';
+    btn.style.background = voted ? 'none' : 'var(--gold-glow)';
   } else {
+    const liked = hasLiked(url);
+    const count = getLikes(url).length;
     btn.innerHTML = liked ? `❤️ ${count}` : `🤍 ${count}`;
     btn.style.borderColor = liked ? 'var(--gold)' : 'var(--border)';
     btn.style.color = liked ? 'var(--gold)' : 'var(--text)';
+    btn.style.background = '';
   }
 }
 function lbBtnAction(btn, fn) {
   const prev = btn.innerHTML;
+  const isLbLike = btn.id === 'lb-like';
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="width:13px;height:13px;border-width:2px;display:inline-block;vertical-align:middle"></span>';
   Promise.resolve(fn()).finally(() => {
     btn.disabled = false;
-    btn.innerHTML = prev;
+    // lb-like обновляется через updateLbLikeBtn — не восстанавливаем prevHtml
+    if (!isLbLike) btn.innerHTML = prev;
   });
 }
 function lbtnClick(btn, photoUrl, ownerRow, isTop) {
@@ -3047,11 +3087,12 @@ async function toggleLike(photoUrl, ownerRow, btn, isTop=false) {
     reactions.push({photo_url:photoUrl, photo_owner_row:ownerRow, user_name:currentUser.name, user_row:currentUser.row, type:'like', text:'', created_at:new Date().toISOString(), reaction_id:res.reaction_id});
   }
   btn.disabled = false;
-  if (btn && btn.id === 'lb-like') {
+  // Обновить кнопку — если это lb-like используем updateLbLikeBtn
+  const lbLikeBtn = document.getElementById('lb-like');
+  if (lbLikeBtn && lbLikeBtn.style.display !== 'none') {
     updateLbLikeBtn();
-  } else {
-    refreshLikeBtn(btn, photoUrl);
   }
+  if (!btn || btn.id !== 'lb-like') refreshLikeBtn(btn, photoUrl);
   renderGallery(); renderTopBike(); renderTopStyle();
 }
 
