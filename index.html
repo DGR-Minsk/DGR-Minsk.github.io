@@ -66,9 +66,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .like-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--card2); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all .2s; }
 .like-btn.voted { background: rgba(245,197,24,.2); }
 .gallery-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-.gallery-item { aspect-ratio: 1; overflow: hidden; cursor: pointer; position: relative; -webkit-touch-callout:none; }
+.gallery-item { aspect-ratio: 1; overflow: hidden; cursor: pointer; position: relative; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+.personal-gallery { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
 .select-mode { user-select:none; -webkit-user-select:none; }
-.sel-circle { position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.9);background:rgba(0,0,0,.35);box-shadow:0 1px 4px rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:5;pointer-events:none }
+.sel-circle { position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.9);background:rgba(0,0,0,.35);box-shadow:0 1px 4px rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:5;pointer-events:none }
+.in-select-mode .sel-circle { display:flex; }
 .sel-circle.checked { background:var(--gold);border-color:var(--gold); }
 .sel-circle.checked::after { content:'✓';color:#000;font-size:13px;font-weight:900;line-height:1 }
 .gallery-item.selected, .personal-gallery-item.selected { outline:2.5px solid var(--gold);outline-offset:-2.5px; }
@@ -689,10 +691,10 @@ function renderEvent() {
       </div>
     </div>
 
-    <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
-      <span>О мероприятии</span>
-      ${canEdit ? `<button onclick="openEditEventDetails()" style="background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:4px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer">✏ Редактировать</button>` : ''}
-    </div>
+    ${canEdit ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="section-title" style="margin:0">О мероприятии</div>
+      <button onclick="openEditEventDetails()" style="background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:4px 8px;font-family:'Inter',sans-serif;font-size:13px;cursor:pointer">✏</button>
+    </div>` : `<div class="section-title" style="margin-top:0">О мероприятии</div>`}
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;font-size:13px;line-height:1.6;color:var(--text)">
       ${(()=>{const d=getEventDetails();return `
       <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-start">${svgIcon('calendar','icon-yellow',22)}<div><b>Дата:</b> ${d.date}</div></div>
@@ -1553,7 +1555,7 @@ function topCard(p,i,type,myVoted) {
       <div class="top-card-bike">${p['МОТОЦИКЛ']||''}</div>
       <div class="top-card-foot">
         <div class="vote-count">${votes}<span>голосов</span></div>
-        ${!isMe?`<button class="like-btn ${voted?'voted':''}" onclick="doVote(${p._row},'${type}',this)" title="Проголосовать (макс. 3 голоса)" style="font-size:11px;font-family:'Inter',sans-serif;font-weight:700;width:auto;padding:6px 10px;border-radius:8px;background:var(--gold-glow);border:1px solid var(--gold);color:var(--gold)">${voted?'🏆 Отменить голос':'🏆 Голосовать'}</button>`:'<span style="font-size:10px;color:var(--muted)">это вы</span>'}
+        ${!isMe?`<button class="like-btn ${voted?'voted':''}" onclick="lbBtnAction(this,()=>doVote(${p._row},'${type}',this))" title="Проголосовать (макс. 3 голоса)" style="font-size:11px;font-family:'Inter',sans-serif;font-weight:700;width:auto;padding:6px 10px;border-radius:8px;background:var(--gold-glow);border:1px solid var(--gold);color:var(--gold)">${voted?'🏆 Отменить голос':'🏆 Голосовать'}</button>`:'<span style="font-size:10px;color:var(--muted)">это вы</span>'}
       </div>
       ${photo ? `<div style="padding:0 4px 4px"><button class="react-btn" onclick="openPhotoComments('${photo}',${p._row})">💬 ${getComments(photo).length}</button></div>` : ''}
     </div>
@@ -1616,7 +1618,7 @@ function renderGallery() {
     ${currentUser&&!currentUser.isGuest?`<button onclick="toggleSelectMode('gallery')" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${_selectMode==='gallery'?'var(--gold)':'var(--border)'};background:${_selectMode==='gallery'?'var(--gold-glow)':'var(--card)'};color:${_selectMode==='gallery'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='gallery'?'✓':'☐'}</button>`:''}
   </div>`;
 
-  el.innerHTML = uploadBtn + sortBar + `<div id="gallery-grid" class="${_selectMode==='gallery'?'select-mode':''}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${sorted.map((ph,i)=>`
+  el.innerHTML = uploadBtn + sortBar + `<div id="gallery-grid" class="${_selectMode==='gallery'?'in-select-mode':''}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${sorted.map((ph,i)=>`
     <div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">
       ${ph.photo_url.startsWith('__FOLDER__') ? `
         <div style="aspect-ratio:1;border-radius:0;position:relative;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:12px;cursor:pointer" onclick="window.open('${ph.photo_url.slice(10)}','_blank')">
@@ -1626,7 +1628,7 @@ function renderGallery() {
           ${currentUser&&!currentUser.isGuest&&String(ph.owner_row_id)===String(currentUser.row)?'<div style="position:absolute;top:6px;left:6px;background:var(--gold);color:var(--black);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px">МОЁ</div>':''}
         </div>` : `
         <div class="gallery-item${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;border-radius:0;position:relative" onclick="handleGalleryClick(this,'gallery','${ph.photo_url}',()=>openLb(${i}))" ontouchstart="startLongPress(this,'gallery','${ph.photo_url}');if(!_selectMode){}else{event.preventDefault()}" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" oncontextmenu="event.preventDefault();return false">
-          <div class="sel-circle${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' checked':''}" style="display:${_selectMode==='gallery'?'flex':'none'}"></div>
+          <div class="sel-circle${_selectMode==='gallery'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div>
           <img src="${px(ph.photo_url)}" loading="lazy" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover">
           <div class="gallery-owner">${ph.owner_name||''}</div>
           ${currentUser&&!currentUser.isGuest&&String(ph.owner_row_id)===String(currentUser.row)?'<div style="position:absolute;top:6px;left:6px;background:var(--gold);color:var(--black);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.5px;pointer-events:none">МОЁ</div>':''}
@@ -1735,14 +1737,14 @@ function openDetail(row) {
         const lt2 = lim2>0?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}/${lim2}</span>`:myUploads2.length?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}</span>`:'';
         return `
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото${lt2}</span>${isMe?`<button onclick="toggleSelectMode('uploads')" style="background:none;border:1px solid var(--border);color:${_selectMode==='uploads'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='uploads'?'✓ Выбор':'☐'}</button>`:''}</span></div>
-          <div class="personal-gallery${_selectMode==='uploads'?' select-mode':''}">
-            ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" style="display:${_selectMode==='uploads'?'flex':'none'}"></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
+          <div class="personal-gallery${_selectMode==='uploads'?' in-select-mode':''}">
+            ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="startUpload('personal_gallery')"><span style="font-size:20px">+</span><span>Загрузить</span></div>`:''}
             ${!myUploads2.length&&!isMe?'<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">Нет фото</div>':''}
           </div>
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&purls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
-          <div class="personal-gallery${_selectMode==='favorites'?' select-mode':''}">
-            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" style="display:${_selectMode==='favorites'?'flex':'none'}"></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
+          <div class="personal-gallery${_selectMode==='favorites'?' in-select-mode':''}">
+            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="openGalleryPickerForFav()"><span style="font-size:20px">★</span><span>Добавить</span></div>`:''}
             ${!purls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
           </div>`;
@@ -3497,6 +3499,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+
+
+// Глобальная блокировка контекстного меню на фото в галерее
+document.addEventListener('contextmenu', function(e) {
+  const el = e.target.closest('.gallery-item, .personal-gallery-item');
+  if (el) { e.preventDefault(); return false; }
+});
+// Блокировка системного меню при долгом нажатии
+document.addEventListener('touchstart', function(e) {
+  const el = e.target.closest('.gallery-item, .personal-gallery-item');
+  if (el) { e.target.style.webkitUserSelect = 'none'; }
+}, {passive: true});
 
 </script>
 
