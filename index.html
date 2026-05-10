@@ -1737,13 +1737,13 @@ function openDetail(row) {
         const lt2 = lim2>0?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}/${lim2}</span>`:myUploads2.length?` <span style="color:var(--muted);font-weight:400;font-size:12px">${myUploads2.length}</span>`:'';
         return `
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото${lt2}</span>${isMe?`<button onclick="toggleSelectMode('uploads')" style="background:none;border:1px solid var(--border);color:${_selectMode==='uploads'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='uploads'?'✓ Выбор':'☐'}</button>`:''}</span></div>
-          <div class="personal-gallery${_selectMode==='uploads'?' in-select-mode':''}">
+          <div class="personal-gallery${_selectMode==='uploads'?' in-select-mode':''}" data-select-mode="uploads">
             ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="startUpload('personal_gallery')"><span style="font-size:20px">+</span><span>Загрузить</span></div>`:''}
             ${!myUploads2.length&&!isMe?'<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">Нет фото</div>':''}
           </div>
           <div class="section-title" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&purls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
-          <div class="personal-gallery${_selectMode==='favorites'?' in-select-mode':''}">
+          <div class="personal-gallery${_selectMode==='favorites'?' in-select-mode':''}" data-select-mode="favorites">
             ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="openGalleryPickerForFav()"><span style="font-size:20px">★</span><span>Добавить</span></div>`:''}
             ${!purls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
@@ -2268,8 +2268,28 @@ function toggleSelectMode(mode) {
     _selectedItems.clear();
   }
   renderSelectBar();
-  if (mode === 'gallery') { renderGallery(); requestAnimationFrame(()=>{ if(document.getElementById('main-scroll')) document.getElementById('main-scroll').scrollTop=scrollPos; }); }
-  else if (currentRecord) { openDetail(currentRecord._row); requestAnimationFrame(()=>{ if(document.getElementById('detail-view')) document.getElementById('detail-view').scrollTop=detailScroll; }); }
+  if (mode === 'gallery') {
+    renderGallery();
+    requestAnimationFrame(()=>{
+      if(document.getElementById('main-scroll')) document.getElementById('main-scroll').scrollTop=scrollPos;
+      applySelectModeClasses();
+    });
+  } else if (currentRecord) {
+    openDetail(currentRecord._row);
+    requestAnimationFrame(()=>{
+      if(document.getElementById('detail-view')) document.getElementById('detail-view').scrollTop=detailScroll;
+      applySelectModeClasses();
+    });
+  }
+}
+
+function applySelectModeClasses() {
+  const gg = document.getElementById('gallery-grid');
+  if (gg) gg.classList.toggle('in-select-mode', _selectMode === 'gallery');
+  document.querySelectorAll('.personal-gallery').forEach(el => {
+    const mode = el.dataset.selectMode;
+    el.classList.toggle('in-select-mode', _selectMode === mode);
+  });
 }
 
 // Долгое нажатие для мобильных
@@ -3027,7 +3047,11 @@ async function toggleLike(photoUrl, ownerRow, btn, isTop=false) {
     reactions.push({photo_url:photoUrl, photo_owner_row:ownerRow, user_name:currentUser.name, user_row:currentUser.row, type:'like', text:'', created_at:new Date().toISOString(), reaction_id:res.reaction_id});
   }
   btn.disabled = false;
-  refreshLikeBtn(btn, photoUrl);
+  if (btn && btn.id === 'lb-like') {
+    updateLbLikeBtn();
+  } else {
+    refreshLikeBtn(btn, photoUrl);
+  }
   renderGallery(); renderTopBike(); renderTopStyle();
 }
 
