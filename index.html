@@ -2330,13 +2330,25 @@ function startLongPress(el, mode, key) {
       renderSelectBar();
     }
     if (navigator.vibrate) navigator.vibrate(40);
-  }, 500);
+  }, 350);
 }
 function cancelLongPress() {
   if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
 }
 function handleGalleryClick(el, mode, key, openFn) {
-  if (_longPressActivated) { _longPressActivated = false; return; }
+  if (_longPressActivated) {
+    // Longpress только что активировал режим — выбираем это фото
+    _longPressActivated = false;
+    if (_selectMode === mode) {
+      toggleSelectItem(key);
+      const isSelected = _selectedItems.has(key);
+      el.classList.toggle('selected', isSelected);
+      const c = el.querySelector('.sel-circle');
+      if (c) { c.classList.toggle('checked', isSelected); c.style.display='flex'; }
+      renderSelectBar();
+    }
+    return;
+  }
   if (_selectMode === mode) {
     toggleSelectItem(key);
     const isSelected = _selectedItems.has(key);
@@ -3570,12 +3582,15 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('contextmenu', function(e) {
   const el = e.target.closest('.gallery-item, .personal-gallery-item');
   if (el) { e.preventDefault(); return false; }
-});
-// Блокировка системного меню при долгом нажатии
+}, true);
+// Блокировка системного меню при долгом нажатии — non-passive для preventDefault
 document.addEventListener('touchstart', function(e) {
   const el = e.target.closest('.gallery-item, .personal-gallery-item');
-  if (el) { e.target.style.webkitUserSelect = 'none'; }
-}, {passive: true});
+  if (el) {
+    e.target.style.webkitUserSelect = 'none';
+    e.target.style.userSelect = 'none';
+  }
+}, {passive: false});
 
 </script>
 
