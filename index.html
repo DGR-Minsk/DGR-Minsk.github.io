@@ -1060,14 +1060,39 @@ async function verifyPhotographerCode() {
   } catch(e) { errEl.textContent='Ошибка. Попробуйте ещё раз.'; errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ КАК ФОТОГРАФ';} }
 }
 
+async function deletePhotographerAccount() {
+  showConfirm('Удалить аккаунт фотографа? Все ваши данные будут удалены.', () => {
+    // Удалить из списка одобренных
+    const approved = JSON.parse(localStorage.getItem('dgr_approved_photographers')||'[]');
+    const filtered = approved.filter(p => p.email !== currentUser.email);
+    localStorage.setItem('dgr_approved_photographers', JSON.stringify(filtered));
+    // Удалить из верифицированных
+    const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
+    if (currentUser.email) delete verified[currentUser.email.toLowerCase()];
+    localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
+    // Выйти
+    localStorage.removeItem('dgr_user');
+    currentUser = null;
+    toast('Аккаунт удалён');
+    setTimeout(() => location.reload(), 1500);
+  }, 'Удалить аккаунт', 'УДАЛИТЬ');
+}
 async function deleteParticipantAccount() {
   showConfirm(
-    'Удалить аккаунт? Все данные будут безвозвратно удалены из базы. Это действие нельзя отменить.',
+    'Удалить аккаунт? Личные данные и загруженные фото будут безвозвратно удалены. Это действие нельзя отменить.',
     async () => {
       showLoad(true);
       try {
+        // Удалить фото из галереи
+        const myPhotos = gallery.filter(g => String(g.owner_row_id) === String(currentUser.row));
+        for (const ph of myPhotos) {
+          await apiPost({action:'deleteGalleryPhoto', row: ph._row});
+        }
+        // Удалить аккаунт участника
         await apiPost({action:'deleteParticipant', row:currentUser.row});
+        // Очистить localStorage
         localStorage.removeItem('dgr_user');
+        localStorage.removeItem('dgr_consent_accepted');
         const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
         if (currentUser.email) delete verified[currentUser.email.toLowerCase()];
         localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
@@ -1368,9 +1393,8 @@ async function modalLogin() {
   }
   // Блокировка проверяется в Apps Script (error: 'blocked')
   const isAdminUser = Object.entries(d.participant).some(([k,v]) => k.toLowerCase().includes('admin') && v && v!=='0' && String(v).toUpperCase()!=='FALSE');
-  // Не хранить чувствительные данные в localStorage
+  // Не хранить access_code в localStorage, email оставляем (нужен для профиля)
   const safeParticipant = {...d.participant};
-  delete safeParticipant['email'];
   delete safeParticipant['access_code'];
   currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: safeParticipant };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
@@ -1711,19 +1735,22 @@ function openDetail(row) {
             ${isMe?`<button onclick="editBikeInfo()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px" title="Редактировать">✏️</button>`:''}
           </div>
           ${isMe ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">${(p['email']||p['Email']||p['EMAIL'])?`<span style="display:flex;align-items:center;gap:8px">${p['email']||p['Email']||p['EMAIL']} <button onclick="removeEmail()" style="background:none;border:none;color:#e53935;font-size:11px;cursor:pointer;padding:0;font-weight:600">✕ Удалить</button></span>`:'<span style="color:var(--gold);cursor:pointer" onclick="openEmailModal()">+ Привязать email</span>'}</div>` : ''}
-          ${isMe ? `<div style="margin-top:10px;display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px">
-            <div style="flex:1">
-              <div style="font-size:12px;font-weight:700;color:var(--text)">Показывать моё имя публично</div>
-              <div style="font-size:10px;color:var(--muted);margin-top:2px">Если выключено — отображается «Участник DGR»</div>
-            </div>
-            <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0">
-              <input type="checkbox" id="show-name-toggle" ${p['show_name']==='TRUE'||p['show_name']===true?'checked':''} onchange="toggleShowName(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
-              <span style="position:absolute;inset:0;background:${p['show_name']==='TRUE'||p['show_name']===true?'var(--gold)':'var(--border)'};border-radius:24px;cursor:pointer;transition:.2s" id="show-name-slider"></span>
-              <span style="position:absolute;width:18px;height:18px;background:white;border-radius:50%;top:3px;left:${p['show_name']==='TRUE'||p['show_name']===true?'21px':'3px'};transition:.2s" id="show-name-knob"></span>
-            </label>
-          </div>` : ''}
+
         </div>
-        ${isMe ? `<button onclick="logout()" title="Выйти" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;align-self:flex-start">↪ Выход</button>` : ''}
+        ${isMe ? `<div style="display:inline-flex;flex-direction:column;gap:4px;align-self:flex-start">
+          <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="deleteParticipantAccount()" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🗑 Удалить аккаунт</button>
+            <button onclick="logout()" title="Выйти" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">↪ Выход</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;margin-top:2px">
+            <span style="flex:1;font-size:11px;color:var(--muted);line-height:1.3">Показывать имя публично<br><span style="font-size:9px;opacity:.6">иначе «Участник DGR»</span></span>
+            <label style="position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0;cursor:pointer">
+              <input type="checkbox" id="show-name-toggle" ${p['show_name']==='TRUE'||p['show_name']===true?'checked':''} onchange="toggleShowName(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
+              <span style="position:absolute;inset:0;background:${p['show_name']==='TRUE'||p['show_name']===true?'var(--gold)':'var(--border)'};border-radius:18px;transition:.2s" id="show-name-slider"></span>
+              <span style="position:absolute;width:14px;height:14px;background:white;border-radius:50%;top:2px;left:${p['show_name']==='TRUE'||p['show_name']===true?'16px':'2px'};transition:.2s" id="show-name-knob"></span>
+            </label>
+          </div>
+        </div>` : ''}
       </div>
     </div>
     ${(p['bike_style']||isMe)?`<div style="padding:0 16px 10px">${p['bike_style']?`<span onclick="openStyleViewer(${isMe})" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-glow);border:1px solid var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--gold);cursor:pointer">${p['bike_style']}${isMe?` ✏`:' 👁'}</span>`:isMe?`<button onclick="openStylePicker()" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">+ Стиль байка</button>`:''}</div>`:''}
@@ -2619,10 +2646,15 @@ async function saveEmail(emailOverride) {
   document.getElementById('email-modal').classList.remove('open');
   document.getElementById('email-step1').style.display = 'block';
   document.getElementById('email-step2').style.display = 'none';
-  await loadData();
+  await loadData(true);
   const me = participants.find(p => String(p._row)===String(currentUser.row));
-  if (me) { currentUser.data = me; localStorage.setItem('dgr_user', JSON.stringify(currentUser)); }
-  if (currentRecord) { currentRecord = participants.find(p=>String(p._row)===String(currentRecord._row))||currentRecord; openDetail(currentRecord._row); }
+  if (me) {
+    currentUser.data = me;
+    localStorage.setItem('dgr_user', JSON.stringify(currentUser));
+    // Обновить currentRecord чтобы страница перерисовалась с новым email
+    currentRecord = me;
+    openDetail(me._row);
+  }
   showLoad(false);
 }
 
@@ -2636,8 +2668,12 @@ let _pendingLoginData = null, _pendingLoginEmail = null;
 async function loginWithCode() {
   const code = document.getElementById('code-input').value.trim();
   if (!code) return;
-  if (!localStorage.getItem('dgr_consent_accepted')) {
-    _afterConsentFn = loginWithCode;
+  if (!localStorage.getItem('dgr_consent_accepted') && !_consentGiven) {
+    _afterConsentFn = async () => {
+      showLoad(true);
+      await _doLoginWithCode(code);
+      showLoad(false);
+    };
     document.getElementById('consent-modal').classList.add('open');
     return;
   }
