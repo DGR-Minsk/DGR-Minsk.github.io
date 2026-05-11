@@ -264,19 +264,16 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
       <button class="modal-btn" onclick="lbBtnAction(this,loginWithCode)">ВОЙТИ КАК УЧАСТНИК</button>
       <div class="divider">или</div>
       <div style="display:flex;gap:10px;margin-bottom:8px">
-        <button onclick="showGuestForm()" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
+        <button onclick="showConsentThen(showGuestForm)" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
           <span style="font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="7" cy="13" r="3"/><path d="M7 17c-3 0-5 1.3-5 2.5V21h10v-1.5C12 18.3 10 17 7 17z"/><rect x="10" y="2" width="12" height="8" rx="2"/><polygon points="12,10 10,13 14,10"/><circle cx="13.5" cy="6" r="1"/><circle cx="16" cy="6" r="1"/><circle cx="18.5" cy="6" r="1"/></svg> Гость</span>
           <span style="font-size:10px;color:var(--muted);line-height:1.3;text-align:center">Просмотр, лайки и комментарии</span>
         </button>
-        <button onclick="showPhotographerForm()" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
+        <button onclick="showConsentThen(showPhotographerForm)" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:'Inter',sans-serif">
           <span style="font-size:13px;font-weight:700;color:var(--gold)">📷 Фотограф</span>
           <span style="font-size:10px;color:var(--muted);line-height:1.3;text-align:center">Загрузка фото в галерею + права гостя</span>
         </button>
       </div>
-      <button onclick="lbBtnAction(this,()=>Promise.resolve(enterViewOnly()))" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:10px 8px;background:none;cursor:pointer;font-family:'Inter',sans-serif;display:flex;flex-direction:column;align-items:center;gap:4px">
-        <span style="font-size:12px;font-weight:700;color:var(--muted)">👀 Зритель</span>
-        <span style="font-size:10px;color:var(--muted);line-height:1.3">Только просмотр страниц</span>
-      </button>
+
       <div style="text-align:center;margin-top:12px;font-size:10px;color:var(--border)">Для входа администратора введите код доступа выше</div>
     </div>
     <div id="auth-email-verify" class="modal-section" style="display:none">
@@ -465,6 +462,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 const API = 'https://script.google.com/macros/s/AKfycby_3wR00iJJVjb6jDslK01wX4uyZMupNAcdZp2_1O0LU85VKqOkedUK9_2toGVTfhHEXw/exec';
 const ADMIN_CODE = 'DGR-ADMIN-2026'; // Ваш секретный код админа — измените!
 const CLD_CLOUD = 'dcgivbwyd', CLD_PRESET = 'motoclub';
+const WRITE_TOKEN = 'dgr2026_msk_7x9k2p1qq';
 
 let participants = [], gallery = [], currentUser = null, currentRecord = null, uploadCtx = null;
 let lbImages = [], lbIndex = 0, lbCurrentPhoto = null;
@@ -526,11 +524,11 @@ function iconMarkup(name, size=24, proportional=false) {
 }
 
 window.onload = async () => {
+  // Показать согласие при первом открытии
   const s = localStorage.getItem('dgr_user');
   if (s) {
     try {
       currentUser = JSON.parse(s);
-      // Показываем приложение сразу со скелетоном, данные грузим в фоне
       showApp();
       await loadData();
       updateUserDisplay();
@@ -551,7 +549,7 @@ async function api(params) {
   return r.json();
 }
 async function apiPost(body) {
-  const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify({...body, token: WRITE_TOKEN}) });
   return r.json();
 }
 
@@ -597,7 +595,6 @@ function showLoad(v) { document.getElementById('loading-screen').style.display =
 
 function showAuth() {
   document.getElementById('auth-screen').style.display = 'block';
-  showConsentIfNeeded();
   document.getElementById('main-scroll').style.overflow = 'hidden';
   ['app-header','app-tabs','bottom-nav'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
 }
@@ -1371,7 +1368,11 @@ async function modalLogin() {
   }
   // Блокировка проверяется в Apps Script (error: 'blocked')
   const isAdminUser = Object.entries(d.participant).some(([k,v]) => k.toLowerCase().includes('admin') && v && v!=='0' && String(v).toUpperCase()!=='FALSE');
-  currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: d.participant };
+  // Не хранить чувствительные данные в localStorage
+  const safeParticipant = {...d.participant};
+  delete safeParticipant['email'];
+  delete safeParticipant['access_code'];
+  currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: safeParticipant };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
   closeAuthModal(); await loadData(); updateUserDisplay(); renderAll();
   toast('Добро пожаловать, ' + currentUser.name.split(' ')[0] + '!');
@@ -2635,7 +2636,17 @@ let _pendingLoginData = null, _pendingLoginEmail = null;
 async function loginWithCode() {
   const code = document.getElementById('code-input').value.trim();
   if (!code) return;
+  if (!localStorage.getItem('dgr_consent_accepted')) {
+    _afterConsentFn = loginWithCode;
+    document.getElementById('consent-modal').classList.add('open');
+    return;
+  }
   showLoad(true);
+  await _doLoginWithCode(code);
+  showLoad(false);
+}
+
+async function _doLoginWithCode(code) {
   try {
     const d = await api({action:'login', code});
     if (d.error) {
@@ -2693,8 +2704,9 @@ function finishParticipantLogin(d) {
   const isAdminUser = adminKey ? (d.participant[adminKey] && d.participant[adminKey]!=='0' && String(d.participant[adminKey]).toUpperCase()!=='FALSE') : false;
   currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: d.participant };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-  showApp();
-  loadData(true).then(() => { updateUserDisplay(); renderAll(); });
+  // Сохранить согласие только после успешного входа
+  if (_consentGiven) { localStorage.setItem('dgr_consent_accepted', Date.now()); _consentGiven = false; }
+  showApp(); loadData(true).then(() => { updateUserDisplay(); renderAll(); });
 }
 
 let adminEditRow = null;
@@ -3641,10 +3653,26 @@ document.addEventListener('touchstart', function(e) {
 }, {passive: false});
 
 
-function showConsentIfNeeded() {
-  if (!localStorage.getItem('dgr_consent_accepted')) {
+let _afterConsentFn = null;
+let _consentGiven = false; // true только после галочек, до входа
+
+function showConsentIfNeeded(afterFn) {
+  // Показывать если не вошёл (нет в localStorage) и галочки не проставлены
+  if (!localStorage.getItem('dgr_consent_accepted') && !_consentGiven) {
+    _afterConsentFn = afterFn || null;
     document.getElementById('consent-modal').classList.add('open');
+    return true;
   }
+  return false;
+}
+
+function resetConsentFlag() {
+  // Сбросить временный флаг если пользователь не завершил вход
+  _consentGiven = false;
+}
+
+function showConsentThen(fn) {
+  if (!showConsentIfNeeded(fn)) fn();
 }
 
 function acceptConsent() {
@@ -3656,8 +3684,24 @@ function acceptConsent() {
     return;
   }
   document.getElementById('consent-err').style.display = 'none';
-  localStorage.setItem('dgr_consent_accepted', Date.now());
+  // НЕ сохраняем в localStorage — сохраним только после успешного входа
+  _consentGiven = true;
   document.getElementById('consent-modal').classList.remove('open');
+  if (_afterConsentFn) {
+    const fn = _afterConsentFn;
+    _afterConsentFn = null;
+    setTimeout(() => { try { fn(); } catch(e) { console.error('consent callback error:', e); } }, 50);
+  }
+}
+
+function declineConsent() {
+  _consentGiven = false;
+  _afterConsentFn = null;
+  localStorage.removeItem('dgr_user');
+  currentUser = null;
+  document.getElementById('consent-modal').classList.remove('open');
+  // Показать заглушку
+  document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#000;color:#888;font-family:Inter,sans-serif;text-align:center;padding:24px"><div style="font-size:32px;margin-bottom:16px">🏍</div><div style="font-size:16px;color:#F5C518;font-weight:700;margin-bottom:8px">DGR 2026 Минск</div><div style="font-size:13px;line-height:1.6">Для использования приложения необходимо принять условия.<br><br><a href="javascript:location.reload()" style="color:#F5C518">Попробовать снова</a></div></div>';
 }
 
 </script>
@@ -4000,7 +4044,8 @@ function acceptConsent() {
       </label>
 
       <div style="color:#e53935;font-size:11px;display:none;margin-bottom:8px" id="consent-err">Необходимо принять все условия</div>
-      <button onclick="acceptConsent()" style="width:100%;background:var(--gold);color:#000;border:none;border-radius:10px;padding:14px;font-family:'Inter',sans-serif;font-size:14px;font-weight:800;cursor:pointer">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
+      <button onclick="acceptConsent()" style="width:100%;background:var(--gold);color:#000;border:none;border-radius:10px;padding:14px;font-family:'Inter',sans-serif;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:8px">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
+      <button onclick="declineConsent()" style="width:100%;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:10px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Отказаться и выйти</button>
     </div>
   </div>
 </div>
