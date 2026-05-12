@@ -573,8 +573,11 @@ async function loadData(force=false) {
     if (currentUser && !currentUser.isGuest) {
       if (!currentUser.isAdmin) {
         const me = participants.find(x => x._row == currentUser.row);
-        if (me) { 
-          currentUser.data = me; 
+        if (me) {
+          // Сохранить email — Apps Script скрывает его в getParticipants
+          const savedEmail = currentUser.email || currentUser.data?.['email'] || '';
+          currentUser.data = me;
+          if (savedEmail) currentUser.data['email'] = savedEmail;
           localStorage.setItem('dgr_user', JSON.stringify(currentUser)); 
         }
         // Load notifications in background
@@ -1396,7 +1399,8 @@ async function modalLogin() {
   // Не хранить access_code в localStorage, email оставляем (нужен для профиля)
   const safeParticipant = {...d.participant};
   delete safeParticipant['access_code'];
-  currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: safeParticipant };
+  const participantEmail = d.participant['email'] || '';
+  currentUser = { name: d.participant['ФИО'] || 'Администратор', row: d.participant._row, isGuest: false, isAdmin: isAdminUser, data: safeParticipant, email: participantEmail };
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
   closeAuthModal(); await loadData(); updateUserDisplay(); renderAll();
   toast('Добро пожаловать, ' + currentUser.name.split(' ')[0] + '!');
@@ -1730,24 +1734,21 @@ function openDetail(row) {
         </div>
         <div style="flex:1">
           <div class="detail-name">${(p['show_name']==='TRUE'||p['show_name']===true||(currentUser&&String(currentUser.row)===String(p._row)))?p['ФИО']:'Участник DGR'}</div>
-          <div style="display:flex;align-items:center;gap:6px">
+          ${isMe ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${(currentUser.email||p['email'])?`<span style="display:flex;align-items:center;gap:6px">${currentUser.email||p['email']} <button onclick="removeEmail()" style="background:none;border:none;color:#e53935;font-size:11px;cursor:pointer;padding:0;font-weight:600">✕</button></span>`:'<span style="color:var(--gold);cursor:pointer" onclick="openEmailModal()">+ Привязать email</span>'}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
             <div class="detail-bike-name">${p['МОТОЦИКЛ']||'Мотоцикл не указан'}</div>
             ${isMe?`<button onclick="editBikeInfo()" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px" title="Редактировать">✏️</button>`:''}
           </div>
-          ${isMe ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">${(p['email']||p['Email']||p['EMAIL'])?`<span style="display:flex;align-items:center;gap:8px">${p['email']||p['Email']||p['EMAIL']} <button onclick="removeEmail()" style="background:none;border:none;color:#e53935;font-size:11px;cursor:pointer;padding:0;font-weight:600">✕ Удалить</button></span>`:'<span style="color:var(--gold);cursor:pointer" onclick="openEmailModal()">+ Привязать email</span>'}</div>` : ''}
 
         </div>
         ${isMe ? `<div style="display:inline-flex;flex-direction:column;gap:4px;align-self:flex-start">
-          <div style="display:flex;gap:6px;align-items:center">
-            <button onclick="deleteParticipantAccount()" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer">🗑 Удалить аккаунт</button>
-            <button onclick="logout()" title="Выйти" style="flex-shrink:0;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">↪ Выход</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;margin-top:2px">
-            <span style="flex:1;font-size:11px;color:var(--muted);line-height:1.3">Показывать имя публично<br><span style="font-size:9px;opacity:.6">иначе «Участник DGR»</span></span>
-            <label style="position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0;cursor:pointer">
+          <button onclick="logout()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer">↪ Выход</button>
+          <div style="display:flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid var(--border);border-radius:8px">
+            <span style="font-size:10px;color:var(--muted);line-height:1.3;max-width:80px">Показывать<br>имя публично<br><span style="font-size:8px;opacity:.6">иначе «Участник DGR»</span></span>
+            <label style="position:relative;display:inline-block;width:30px;height:16px;flex-shrink:0;cursor:pointer">
               <input type="checkbox" id="show-name-toggle" ${p['show_name']==='TRUE'||p['show_name']===true?'checked':''} onchange="toggleShowName(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
-              <span style="position:absolute;inset:0;background:${p['show_name']==='TRUE'||p['show_name']===true?'var(--gold)':'var(--border)'};border-radius:18px;transition:.2s" id="show-name-slider"></span>
-              <span style="position:absolute;width:14px;height:14px;background:white;border-radius:50%;top:2px;left:${p['show_name']==='TRUE'||p['show_name']===true?'16px':'2px'};transition:.2s" id="show-name-knob"></span>
+              <span style="position:absolute;inset:0;background:${p['show_name']==='TRUE'||p['show_name']===true?'var(--gold)':'var(--border)'};border-radius:16px;transition:.2s" id="show-name-slider"></span>
+              <span style="position:absolute;width:12px;height:12px;background:white;border-radius:50%;top:2px;left:${p['show_name']==='TRUE'||p['show_name']===true?'16px':'2px'};transition:.2s" id="show-name-knob"></span>
             </label>
           </div>
         </div>` : ''}
@@ -2582,6 +2583,7 @@ async function removeEmail() {
     showLoad(true);
     await apiPost({action:'updateParticipant', row:currentUser.row, fields:{email:''}});
     if (currentUser.data) currentUser.data['email'] = '';
+    currentUser.email = '';
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
     toast('Email удалён');
     await loadData(true);
@@ -2641,6 +2643,7 @@ async function saveEmail(emailOverride) {
   if (res.error) { toast('Ошибка сохранения'); showLoad(false); return; }
   // Обновить currentUser.data сразу
   if (currentUser.data) currentUser.data['email'] = email;
+  currentUser.email = email;
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
   toast('Email сохранён! Теперь можно входить по email.');
   document.getElementById('email-modal').classList.remove('open');
@@ -3848,6 +3851,9 @@ function declineConsent() {
     <input class="field" id="bike-name-input" placeholder="Например: Triumph Bonneville T100 2022">
     <button class="modal-btn" onclick="lbBtnAction(this,saveBikeInfo)">СОХРАНИТЬ</button>
     <button class="modal-btn ghost" onclick="document.getElementById('bike-edit-modal').classList.remove('open')">Отмена</button>
+    <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
+      <button onclick="document.getElementById('bike-edit-modal').classList.remove('open');deleteParticipantAccount()" style="width:100%;background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:6px;font-family:'Inter',sans-serif">🗑 Удалить аккаунт и все данные</button>
+    </div>
   </div>
 </div>
 
