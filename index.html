@@ -274,6 +274,9 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
         </button>
       </div>
 
+      <button onclick="enterViewOnly()" style="width:100%;background:transparent;border:1px solid var(--border);border-radius:10px;padding:10px 8px;cursor:pointer;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px">
+        <span style="font-size:12px;font-weight:700;color:var(--muted)">👀 Зритель — только просмотр</span>
+      </button>
       <div style="text-align:center;margin-top:12px;font-size:10px;color:var(--border)">Для входа администратора введите код доступа выше</div>
     </div>
     <div id="auth-email-verify" class="modal-section" style="display:none">
@@ -1084,6 +1087,18 @@ async function deletePhotographerAccount() {
     setTimeout(() => location.reload(), 1500);
   }, 'Удалить аккаунт', 'УДАЛИТЬ');
 }
+async function deleteLivePhoto() {
+  showConfirm('Удалить живое фото байка?', async () => {
+    showLoad(true);
+    await apiPost({action:'updateParticipant', row:currentUser.row, fields:{'ЖИВОЕ ФОТО БАЙКА': ''}});
+    if (currentUser.data) currentUser.data['ЖИВОЕ ФОТО БАЙКА'] = '';
+    localStorage.setItem('dgr_user', JSON.stringify(currentUser));
+    toast('Живое фото удалено');
+    await loadData(true);
+    if (currentRecord) openDetail(currentRecord._row);
+    showLoad(false);
+  }, 'Удалить фото', 'УДАЛИТЬ');
+}
 async function deleteParticipantAccount() {
   showConfirm(
     'Удалить аккаунт? Личные данные и загруженные фото будут безвозвратно удалены. Это действие нельзя отменить.',
@@ -1601,6 +1616,7 @@ function topCard(p,i,type,myVoted) {
   const votes = type==='bike'?gvb(p):gvs(p);
   const voted = myVoted.includes(String(p._row));
   const isMe = currentUser&&!currentUser.isGuest&&currentUser.row==p._row;
+      const showOwnerName = p['show_name'] === true || p['show_name'] === 'TRUE';
   const rc = i<3?`r${i+1}`:'';
   return `<div class="top-card">
     <div class="top-card-img" onclick="openLbSingleFull('${photo}','${p['ФИО']}','${p['МОТОЦИКЛ']||''}','top',${p._row})">
@@ -1714,6 +1730,7 @@ function openDetail(row) {
   currentRecord=p;
 
   const isMe = currentUser&&!currentUser.isGuest&&currentUser.row==row;
+  const showOwnerName = p['show_name'] === true || p['show_name'] === 'TRUE';
   const factory=gp(p), live=gl(p), portrait=gpt(p), cb=gcb(p), cs=gcs(p);
   const infoUrl = p['Описание мото']||'';
   const specs = [
@@ -1771,10 +1788,13 @@ function openDetail(row) {
           <img class="live-photo" src="${px(live)}" onclick="openLbSingle('${live}','${p['ФИО']}','Живое фото байка')">
         </div><br>`:
         isMe?`<div class="section-title">📷 Живое фото байка</div><div class="live-photo-ph" onclick="startUpload('live_photo')">📷 Загрузить живое фото байка</div>`:''}
-      ${isMe&&live?`<button class="detail-btn secondary" onclick="startUpload('live_photo')" style="margin-top:8px;margin-bottom:0">📷 Обновить живое фото</button>`:''}
+      ${isMe&&live?`<div style="display:flex;gap:8px;margin-top:8px;margin-bottom:0">
+        <button class="detail-btn secondary" onclick="startUpload('live_photo')" style="flex:1">📷 Обновить</button>
+        <button class="detail-btn secondary" onclick="deleteLivePhoto()" style="flex:1;color:#e53935;border-color:#e53935">🗑 Удалить</button>
+      </div>`:''}
 
-      ${(!isMe && !showOwnerName) ? '' : `<div class="section-title">Конкурсные фото</div>`}
-      <div class="contest-slots" style="display:${(!isMe&&!showOwnerName)?'none':'grid'}">
+      ${isMe||showOwnerName ? `<div class="section-title">Конкурсные фото</div>` : ''}
+      <div class="contest-slots" style="display:${isMe||showOwnerName?'grid':'none'}">
         <div class="contest-slot${cb?' has-photo':''}" onclick="${isMe&&!cb?`startUpload('contest_bike')`:cb?`openLbSingle('${cb}','${p['ФИО']}','ТОП Байк','contest_bike')`:``}">
           ${cb?`<img src="${px(cb)}"><div class="contest-slot-overlay"><span style="font-size:20px">✏</span><span style="font-size:11px;color:white">${isMe?'Нажмите чтобы изменить':''}</span></div>`:''}
           ${!cb?`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px"><div style="display:flex;align-items:center;gap:8px">${propIcon('bike',20)}<span class="contest-slot-label" style="margin:0">ТОП Байк</span></div>${isMe?`<span class="contest-slot-title">+ Загрузить</span>`:''}</div>`:''}
@@ -1784,7 +1804,7 @@ function openDetail(row) {
           ${!cs?`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px"><div style="display:flex;align-items:center;gap:8px">${propIcon('bowtie',18)}<span class="contest-slot-label" style="margin:0">ТОП Стиль</span></div>${isMe?`<span class="contest-slot-title">+ Загрузить</span>`:''}</div>`:''}
         </div>
       </div>
-      ${(cb||cs) && (isMe||showOwnerName) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+      ${(cb||cs)&&(isMe||showOwnerName) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
         <div style="text-align:center">
           ${cb ? `<div style="font-size:10px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:flex-end;justify-content:center;gap:6px">${propIcon('bike',12)} ТОП Байк</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px;display:flex;align-items:center;justify-content:center;gap:4px">${svgIcon('trophy','icon-yellow',12)} ${gvb(p)} голосов</div>` : ''}
