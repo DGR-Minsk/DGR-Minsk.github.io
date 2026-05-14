@@ -475,14 +475,43 @@ const DEFAULT_TIMINGS = {
   vote_end: '2026-05-17T18:00:00'
 };
 
+let _timingsCache = null;
+
 function getTimings() {
+  if (_timingsCache) return _timingsCache;
   try {
     const saved = localStorage.getItem('dgr_timings');
     if (saved) return {...DEFAULT_TIMINGS, ...JSON.parse(saved)};
   } catch(e) {}
   return {...DEFAULT_TIMINGS};
 }
-function saveTimings(t) { localStorage.setItem('dgr_timings', JSON.stringify(t)); }
+function saveTimingsLocal(t) { 
+  _timingsCache = t;
+  localStorage.setItem('dgr_timings', JSON.stringify(t)); 
+}
+
+async function loadTimingsFromServer() {
+  try {
+    const res = await api({action:'getTimings'});
+    if (res && res.timings) {
+      saveTimingsLocal(res.timings);
+    }
+  } catch(e) {}
+}
+
+async function loadPartnersFromServer() {
+  try {
+    const res = await api({action:'getPartners'});
+    if (res && res.partners) {
+      localStorage.setItem('dgr_partners', JSON.stringify(res.partners));
+    }
+  } catch(e) {}
+}
+
+async function saveTimingsToServer(t) {
+  saveTimingsLocal(t);
+  await apiPost({action:'saveTimings', timings: t}).catch(()=>{});
+}
 
 function isPhotoUploadOpen() {
   const t = getTimings();
@@ -643,11 +672,15 @@ async function loadData(force=false) {
     const [p, g, r] = await Promise.all([
       api({action:'getParticipants'}),
       api({action:'getGallery'}),
-      api({action:'getReactions'})  // TODO: lazy load per-photo
+      api({action:'getReactions'})
     ]);
     participants = p.participants || [];
     gallery = g.photos || [];
     reactions = r.reactions || [];
+    // Загрузить тайминги с сервера (фоново, не блокирует)
+    loadTimingsFromServer();
+    // Загрузить партнёров с сервера
+    loadPartnersFromServer();
     if (currentUser && !currentUser.isGuest) {
       if (!currentUser.isAdmin) {
         const me = participants.find(x => x._row == currentUser.row);
@@ -707,7 +740,10 @@ function getPartners() {
     return stored || DEFAULT_PARTNERS;
   } catch { return DEFAULT_PARTNERS; }
 }
-function savePartners(list) { localStorage.setItem('dgr_partners', JSON.stringify(list)); }
+function savePartners(list) { 
+  localStorage.setItem('dgr_partners', JSON.stringify(list)); 
+  apiPost({action:'savePartners', partners: JSON.stringify(list)}).catch(()=>{});
+}
 
 function getEventDetails() {
   const def = {date:'май 2026', place:'Минск, Беларусь', dresscode:'джентльменский стиль — твид, костюм, классика', goal:'поддержка благотворительных программ и сообщества классических мотоциклов'};
@@ -1124,15 +1160,16 @@ async function verifyGuestCode() {
     // Показать consent если ещё не давал
     if (!_consentGiven) {
       _afterConsentFn = () => {
-        // Записать согласие гостя в таблицу через отдельный action
+        showLoad(true);
         apiPost({action:'saveGuestConsent', email: email, name: guestName, consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString()}).catch(()=>{});
-        loadData(true).then(showApp);
+        loadData(true).then(() => { showLoad(false); showApp(); });
       };
       document.getElementById('consent-modal').classList.add('open');
     } else {
       _consentGiven = false;
+      showLoad(true);
       apiPost({action:'saveGuestConsent', email: email, name: guestName, consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString()}).catch(()=>{});
-      loadData(true).then(showApp);
+      loadData(true).then(() => { showLoad(false); showApp(); });
     }
   } catch(e){errEl.textContent='Ошибка. Попробуйте ещё раз.';errEl.style.display='block';if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ';}}
 }
@@ -1224,6 +1261,19 @@ async function deletePhotographerPhoto(row, url) {
 
 async function deletePhotographerAccount() {
   showConfirm('Удалить аккаунт фотографа? Все ваши данные и фото будут удалены. Согласия будут отозваны.', async () => {
+    showLoad(true);
+    try {
+      // Удалить фото из Cloudinary и галереи
+      const myPhotos = gallery.filter(g => String(g.owner_name) === currentUser.name);
+      for (const ph of myPhotos) {
+        await deleteFromCloudinary(ph.photo_url);
+        await apiPost({action:'deleteGalleryPhoto', row: ph._row});
+      }
+      // Удалить верификацию и согласия из таблицы
+      if (currentUser.email) {
+        await apiPost({action:'deleteGuestData', email: currentUser.email}).catch(()=>{});
+      }
+    } catch(e) {}
     // Удалить из списка одобренных
     const approved = JSON.parse(localStorage.getItem('dgr_approved_photographers')||'[]');
     const filtered = approved.filter(p => p.email !== currentUser.email);
@@ -1236,6 +1286,7 @@ async function deletePhotographerAccount() {
     localStorage.removeItem('dgr_user');
     currentUser = null;
     toast('Аккаунт удалён');
+    showLoad(false);
     setTimeout(() => location.reload(), 1500);
   }, 'Удалить аккаунт', 'УДАЛИТЬ');
 }
@@ -1297,14 +1348,18 @@ async function deleteParticipantAccount() {
   );
 }
 function deleteGuestAccount() {
-  showConfirm('Удалить аккаунт? Для повторного входа потребуется верификация email.', () => {
+  showConfirm('Удалить аккаунт? Все данные будут удалены, согласия отозваны. Для повторного входа потребуется верификация email.', async () => {
+    showLoad(true);
     if (currentUser && currentUser.email) {
       const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
       delete verified[currentUser.email.toLowerCase()];
       localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
+      // Удалить верификацию и согласия из таблицы
+      await apiPost({action:'deleteGuestData', email: currentUser.email}).catch(()=>{});
     }
     localStorage.removeItem('dgr_user');
     currentUser = null;
+    showLoad(false);
     location.reload();
   }, 'Удалить аккаунт', 'УДАЛИТЬ');
 }
@@ -1530,12 +1585,13 @@ function openPhotographerCabinet() {
       ${currentUser.email ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">📧 ${currentUser.email}</div>` : ''}
       <div style="font-size:13px;color:var(--text);margin-top:8px">📷 Загружено: <strong>${myPhotos.length}${limitStr}</strong> фото</div>
     </div>
-    ${myPhotos.length ? `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px">Мои фото</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+    ${myPhotos.length ? `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото</span><button onclick="toggleSelectMode('photographer')" style="background:none;border:1px solid var(--border);color:${_selectMode==='photographer'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='photographer'?'✓ Выбор':'☐'}</button></div>
+    <div class="personal-gallery${_selectMode==='photographer'?' in-select-mode':''}" data-select-mode="photographer" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
       ${myPhotos.sort((a,b)=>new Date(b.uploaded_at||0)-new Date(a.uploaded_at||0)).map(ph => `
-        <div style="aspect-ratio:1;background:var(--card);border-radius:10px;overflow:hidden;position:relative">
-          <img src="${px(ph.photo_url)}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onclick="openLbSingle('${ph.photo_url}','${currentUser.name}','Моё фото')">
-          <button onclick="event.stopPropagation();deletePhotographerPhoto(${ph._row},'${ph.photo_url}')" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);border:1px solid #e53935;color:#e53935;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        <div class="personal-gallery-item${_selectMode==='photographer'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;background:var(--card);border-radius:10px;overflow:hidden;position:relative" onclick="if(_selectMode==='photographer'){handleGalleryClick(this,'photographer','${ph.photo_url}',null)}else{openLbSingle('${ph.photo_url}','${currentUser.name}','Моё фото')}" ontouchstart="startLongPress(this,'photographer','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" oncontextmenu="event.preventDefault();return false">
+          <div class="sel-circle${_selectMode==='photographer'&&_selectedItems.has(ph.photo_url)?' checked':''}"></div>
+          <img src="${px(ph.photo_url)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+          ${_selectMode!=='photographer'?`<button onclick="event.stopPropagation();deletePhotographerPhoto(${ph._row},'${ph.photo_url}')" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);border:1px solid #e53935;color:#e53935;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>`:''}
         </div>`).join('')}
     </div>` : '<div class="empty" style="margin-bottom:16px">Вы ещё не загружали фото</div>'}
   `;
@@ -1853,7 +1909,9 @@ let gallerySortBy = 'new'; // 'new' | 'likes' | 'comments'
 
 function renderGallery() {
   const el = document.getElementById('gallery-view');
-  const _gLimit = currentUser && currentUser.data ? parseInt(currentUser.data['photo_limit']) || 0 : 0;
+  const _gLimit = currentUser && currentUser.isPhotographer 
+    ? getPhotographerLimit() 
+    : (currentUser && currentUser.data ? parseInt(currentUser.data['photo_limit']) || 0 : 0);
   const _gCount = currentUser ? gallery.filter(ph =>
     currentUser.isPhotographer
       ? ph.owner_name === currentUser.name
@@ -1958,7 +2016,7 @@ function openDetail(row) {
     ${(p['bike_style']||isMe)?`<div style="padding:0 16px 10px">${p['bike_style']?`<span onclick="openStyleViewer(${isMe})" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-glow);border:1px solid var(--gold);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--gold);cursor:pointer">${p['bike_style']}${isMe?` ✏`:''}</span>`:isMe?`<button onclick="openStylePicker()" style="background:transparent;border:1.5px dashed var(--border);color:var(--muted);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif">+ Стиль байка</button>`:''}</div>`:''}
     <div class="section-title" style="padding:0 16px 0;margin-top:0;display:flex;align-items:center;justify-content:space-between">
         <span>Заводское фото байка</span>
-        ${isMe?`<button onclick="openFactoryPhotoEdit()" style="background:none;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:4px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;margin-right:16px">✏ Изменить</button>`:''}
+        ${isMe?`<button onclick="openFactoryPhotoEdit()" style="background:none;border:none;color:var(--gold);font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;padding:0;margin-right:16px">✏ Редактировать</button>`:''}
       </div>
     ${factory?`<img src="${px(factory)}" onclick="openLbSingle('${factory}','${p['ФИО']}','Заводское фото байка')" style="width:100%;max-height:280px;object-fit:contain;background:var(--card);cursor:pointer;display:block">`:`<div class="detail-hero-ph">🏍</div>`}
     <div class="detail-body">
@@ -2043,8 +2101,10 @@ function startUpload(type, fromTab) {
   // Проверка таймингов загрузки (админ не ограничен)
   if (!isAdmin() && !isPhotoUploadOpen()) {
     const t = getTimings();
+    const typeNames = {contest_bike:'ТОП Байк', contest_style:'ТОП Стиль', live_photo:'живое фото', portrait:'фото профиля', gallery_general:'фото в галерею'};
+    const typeName = typeNames[type] || 'фото';
     if (t.photo_start && Date.now() < new Date(t.photo_start).getTime()) {
-      toast('Загрузка фото откроется ' + formatTimingDate(t.photo_start));
+      toast(`Загрузка ${typeName} станет возможна после ${formatTimingDate(t.photo_start)}`);
     } else {
       toast('Загрузка фото закрыта');
     }
@@ -2065,6 +2125,27 @@ function startUpload(type, fromTab) {
     }
   }
   uploadCtx = {type, fromTab: fromTab || null};
+  
+  // Предупреждение о сбросе голосов для конкурсных фото
+  if ((type === 'contest_bike' || type === 'contest_style') && currentUser.data) {
+    const currentPhoto = type === 'contest_bike' ? gcb(currentUser.data) : gcs(currentUser.data);
+    const currentVotes = type === 'contest_bike' ? gvb(currentUser.data) : gvs(currentUser.data);
+    if (currentPhoto && currentVotes > 0) {
+      const contestName = type === 'contest_bike' ? 'ТОП Байк' : 'ТОП Стиль';
+      showConfirm(
+        `У вас ${currentVotes} голос${currentVotes===1?'':'ов'} в конкурсе ${contestName}. При обновлении фото все голоса будут сброшены. Продолжить?`,
+        () => { _openUploadChoice(type); },
+        'Обновить фото',
+        'ОБНОВИТЬ'
+      );
+      return;
+    }
+  }
+  
+  _openUploadChoice(type);
+}
+
+function _openUploadChoice(type) {
   const titles = { live_photo:'Живое фото байка', portrait:'Фото профиля', contest_bike:'Фото для ТОП Байк', contest_style:'Фото для ТОП Стиль', personal_gallery:'Фото в галерею', gallery_general:'Фото в общую галерею' };
   document.getElementById('choice-title').textContent = titles[type]||'Загрузить фото';
   document.getElementById('choice-gallery-btn').style.display = ['contest_bike','contest_style'].includes(type)?'flex':'none';
@@ -2220,19 +2301,27 @@ async function savePhoto(url) {
   } else {
     const field = fm[type]; 
     if (!field) { toast('Ошибка: неизвестный тип ' + type); return; }
+    
+    // Для конкурсных фото — сбросить голоса при обновлении
+    const fields = {[field]: url};
+    if (type === 'contest_bike' || type === 'contest_style') {
+      const voteField = type === 'contest_bike' ? 'votes_bike' : 'votes_style';
+      fields[voteField] = '0';
+      // Также нужно убрать голоса за этого участника у всех проголосовавших
+      await apiPost({action:'resetVotesForParticipant', targetRow: currentUser.row, type: type === 'contest_bike' ? 'bike' : 'style'}).catch(()=>{});
+    }
+    
     console.log('Saving field:', field, 'value:', url, 'row:', currentUser.row);
-    const res = await apiPost({action:'updateParticipant', row:currentUser.row, fields:{[field]:url}});
+    const res = await apiPost({action:'updateParticipant', row:currentUser.row, fields});
     console.log('updateParticipant result:', JSON.stringify(res));
     if (res && res.error) { toast('Ошибка: ' + res.error); return; }
     toast('Фото сохранено!');
     await loadData();
-    // Update currentUser.data immediately from fresh participants
     const me = participants.find(p => p._row == currentUser.row);
     if (me) { 
       syncUserData(me);
     }
     renderAll();
-    // If uploaded from TOP tab — stay on TOP, don't open detail
     if (uploadCtx?.fromTab === 'bike') {
       setTimeout(() => switchTab(1), 100);
     } else if (uploadCtx?.fromTab === 'style') {
@@ -2688,20 +2777,34 @@ function startLongPress(el, mode, key) {
   }, 350);
 }
 function cancelLongPress(event) {
-  if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+  if (_longPressTimer) { 
+    clearTimeout(_longPressTimer); 
+    _longPressTimer = null;
+    // Короткий тап (не longpress) в режиме выбора — тоже выделить/снять
+    if (_selectMode && event.type === 'touchend') {
+      const el = event.target.closest('.gallery-item, .personal-gallery-item');
+      if (el) {
+        const lpk = el.getAttribute('data-lpkey');
+        const ontouchstart = el.getAttribute('ontouchstart') || '';
+        const keyMatch = ontouchstart.match(/startLongPress\(this,'([^']+)','([^']+)'\)/);
+        if (keyMatch && keyMatch[1] === _selectMode) {
+          const key = keyMatch[2];
+          toggleSelectItem(key);
+          const isSelected = _selectedItems.has(key);
+          el.classList.toggle('selected', isSelected);
+          const c = el.querySelector('.sel-circle');
+          if (c) { c.classList.toggle('checked', isSelected); c.style.display='flex'; }
+          renderSelectBar();
+          event.preventDefault();
+        }
+      }
+    }
+  }
 }
 function handleGalleryClick(el, mode, key, openFn) {
   if (_longPressActivated) {
-    // Longpress только что активировал режим — выбираем это фото
+    // Longpress уже выбрал фото в startLongPress — просто сбрасываем флаг
     _longPressActivated = false;
-    if (_selectMode === mode) {
-      toggleSelectItem(key);
-      const isSelected = _selectedItems.has(key);
-      el.classList.toggle('selected', isSelected);
-      const c = el.querySelector('.sel-circle');
-      if (c) { c.classList.toggle('checked', isSelected); c.style.display='flex'; }
-      renderSelectBar();
-    }
     return;
   }
   if (_selectMode === mode) {
@@ -2736,7 +2839,7 @@ function renderSelectBar() {
   bar.innerHTML = `
     <div style="flex:1;font-size:13px;font-weight:700;color:var(--gold)">Выбрано: ${n}</div>
     <button onclick="bulkDownload()" style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">⬇ Скачать</button>
-    ${_selectMode==='uploads'?`<button onclick="bulkDelete()" style="background:none;border:1px solid #e53935;color:#ff5555;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🗑 Удалить</button>`:''}
+    ${_selectMode==='uploads'||_selectMode==='photographer'?`<button onclick="bulkDelete()" style="background:none;border:1px solid #e53935;color:#ff5555;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🗑 Удалить</button>`:''}
     ${_selectMode==='gallery'&&currentUser&&[..._selectedItems].every(url=>gallery.find(g=>g.photo_url===url&&String(g.owner_row_id)===String(currentUser.row)))?`<button onclick="bulkDelete()" style="background:none;border:1px solid #e53935;color:#ff5555;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🗑 Удалить</button>`:''}
     ${_selectMode==='favorites'?`<button onclick="bulkRemoveFav()" style="background:none;border:1px solid var(--gold);color:var(--gold);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">★ Убрать</button>`:''}
     <button onclick="toggleSelectMode(_selectMode)" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer">✕</button>
@@ -2784,13 +2887,22 @@ async function bulkDelete() {
   showConfirm(`Удалить ${_selectedItems.size} фото?`, async () => {
     showLoad(true);
     for (const url of _selectedItems) {
-      const ph = gallery.find(g => g.photo_url === url && String(g.owner_row_id) === String(currentUser.row));
-      if (ph) await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+      let ph;
+      if (_selectMode === 'photographer') {
+        ph = gallery.find(g => g.photo_url === url && g.owner_name === currentUser.name);
+      } else {
+        ph = gallery.find(g => g.photo_url === url && String(g.owner_row_id) === String(currentUser.row));
+      }
+      if (ph) {
+        await deleteFromCloudinary(ph.photo_url);
+        await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+      }
     }
     _selectMode = null; _selectedItems.clear(); renderSelectBar();
     toast('Фото удалены');
     await loadData(true); renderAll();
     if (currentRecord) openDetail(currentRecord._row);
+    if (currentUser && currentUser.isPhotographer) openPhotographerCabinet();
     showLoad(false);
   }, 'Удалить фото');
 }
@@ -2884,6 +2996,11 @@ async function removeEmail() {
     if(me){syncUserData(me);}
     renderAll();
     if(currentRecord) openDetail(currentRecord._row);
+    // Обновить секцию email в модалке если открыта
+    const emailSec = document.getElementById('bike-edit-email-section');
+    if (emailSec) {
+      emailSec.innerHTML = `<button onclick="document.getElementById('bike-edit-modal').classList.remove('open');openEmailModal()" style="background:transparent;border:1.5px dashed var(--gold);color:var(--gold);border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;width:100%;margin-bottom:8px">+ Привязать email для входа</button>`;
+    }
     showLoad(false);
   }, 'Удалить email', 'УДАЛИТЬ');
 }
@@ -3294,12 +3411,12 @@ function saveAdminTimings() {
   t.photo_end = pe ? new Date(pe).toISOString() : null;
   t.vote_start = vs ? new Date(vs).toISOString() : null;
   t.vote_end = ve ? new Date(ve).toISOString() : null;
-  saveTimings(t);
+  saveTimingsToServer(t);
   toast('Тайминги сохранены');
   renderAdminSettings();
 }
 function resetAdminTimings() {
-  saveTimings(DEFAULT_TIMINGS);
+  saveTimingsToServer(DEFAULT_TIMINGS);
   toast('Тайминги сброшены');
   renderAdminSettings();
 }
@@ -3353,14 +3470,17 @@ function renderAdminRequests() {
   if (badge) { badge.textContent = requests.length; badge.style.display = requests.length ? 'inline-flex' : 'none'; }
   if (!requests.length) { el.innerHTML = '<div class="empty">Новых заявок нет</div>'; return; }
   el.innerHTML = requests.map((r, i) => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">
+    <div style="background:var(--card);border:1px solid ${r.approved?'rgba(76,175,80,.3)':'var(--border)'};border-radius:12px;padding:12px;margin-bottom:8px">
       <div style="font-weight:700;font-size:13px">${r.name}</div>
       <div style="font-size:11px;color:var(--gold);margin:2px 0">📧 ${r.email}</div>
       <div style="font-size:12px;color:var(--muted);margin:6px 0 10px;line-height:1.4">${r.motivation}</div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:10px">${r.date ? new Date(r.date).toLocaleDateString('ru-RU') : ''}</div>
       <div style="display:flex;gap:8px">
-        <button onclick="lbBtnAction(this,()=>adminApprovePhotographer(${i}))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✓ Одобрить</button>
-        <button onclick="adminRejectPhotographer(${i})" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✕ Отклонить</button>
+        ${r.approved
+          ? `<div style="flex:1;background:var(--card);border:1px solid rgba(76,175,80,.3);color:rgba(76,175,80,.6);border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;text-align:center">✓ Одобрено</div>
+             <button onclick="adminRevokePhotographer(${i})" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">↩ Отозвать</button>`
+          : `<button onclick="lbBtnAction(this,()=>adminApprovePhotographer(${i}))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✓ Одобрить</button>
+             <button onclick="adminRejectPhotographer(${i})" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:8px;font-family:'Inter',sans-serif;font-weight:700;font-size:12px;cursor:pointer">✕ Отклонить</button>`}
       </div>
     </div>
   `).join('');
@@ -3800,8 +3920,11 @@ function openNotifications() {
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <button onclick="lbBtnAction(this,()=>Promise.resolve(adminApprovePhotographer(${i})).then(()=>openNotifications()))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✓ Одобрить</button>
-        <button onclick="adminRejectPhotographer(${i});openNotifications()" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✕ Отклонить</button>
+        ${r.approved
+          ? `<div style="flex:1;background:var(--card);border:1px solid rgba(76,175,80,.3);color:rgba(76,175,80,.6);border-radius:8px;padding:6px;font-size:11px;font-weight:700;text-align:center">✓ Одобрено</div>
+             <button onclick="adminRevokePhotographer(${i});openNotifications()" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">↩ Отозвать</button>`
+          : `<button onclick="lbBtnAction(this,()=>Promise.resolve(adminApprovePhotographer(${i})).then(()=>openNotifications()))" style="flex:1;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✓ Одобрить</button>
+             <button onclick="adminRejectPhotographer(${i});openNotifications()" style="flex:1;background:none;border:1px solid #e53935;color:#e53935;border-radius:8px;padding:6px;font-size:11px;font-weight:700;cursor:pointer">✕ Отклонить</button>`}
       </div>
     </div>`;
   }).join('');
