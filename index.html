@@ -502,8 +502,11 @@ async function loadTimingsFromServer() {
 async function loadPartnersFromServer() {
   try {
     const res = await api({action:'getPartners'});
-    if (res && res.partners) {
+    if (res && res.partners && res.partners.length > 0) {
       localStorage.setItem('dgr_partners', JSON.stringify(res.partners));
+    } else if (!res || !res.partners) {
+      // На сервере пусто — залить дефолтных партнёров
+      savePartners(DEFAULT_PARTNERS);
     }
   } catch(e) {}
 }
@@ -737,7 +740,8 @@ const DEFAULT_PARTNERS = [
 function getPartners() {
   try {
     const stored = JSON.parse(localStorage.getItem('dgr_partners') || 'null');
-    return stored || DEFAULT_PARTNERS;
+    if (stored && stored.length > 0) return stored;
+    return DEFAULT_PARTNERS;
   } catch { return DEFAULT_PARTNERS; }
 }
 function savePartners(list) { 
