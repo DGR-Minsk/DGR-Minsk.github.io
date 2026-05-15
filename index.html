@@ -634,6 +634,8 @@ window.onload = async () => {
       await loadData();
       updateUserDisplay();
       renderAll();
+      const _initHash = location.hash.match(/^#participant=(\d+)$/);
+      if (_initHash) { const _rid = parseInt(_initHash[1]); if (participants.find(p=>p._row===_rid)) openDetail(_rid); }
     } catch(e) {
       currentUser = null;
       localStorage.removeItem('dgr_user');
@@ -643,6 +645,16 @@ window.onload = async () => {
     showAuth();
   }
 };
+
+window.addEventListener('popstate', () => {
+  if (!location.hash.startsWith('#participant=')) {
+    if (document.getElementById('detail-view')?.style.display !== 'none') {
+      clearSelectionUI();
+      document.getElementById('detail-view').style.display = 'none';
+      renderAll();
+    }
+  }
+});
 
 async function api(params) {
   const url = API + '?' + new URLSearchParams(params);
@@ -839,7 +851,7 @@ function renderEvent() {
             <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.desc || p.url.replace(/^https?:\/\//,'')}</div>
           </div>
           <span style="color:var(--gold);font-size:18px;flex-shrink:0">→</span>
-          ${canEdit ? `<button onclick="event.preventDefault();event.stopPropagation();removePartner(${i})" style="background:none;border:none;color:#e53935;font-size:14px;cursor:pointer;padding:4px 6px" title="Удалить">✕</button>` : ''}
+          ${canEdit ? `<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0" onclick="event.preventDefault();event.stopPropagation()"><button onclick="openEditPartner(${i})" style="background:none;border:none;color:var(--gold);font-size:14px;cursor:pointer;padding:2px 6px" title="Редактировать">✏</button><button onclick="removePartner(${i})" style="background:none;border:none;color:#e53935;font-size:14px;cursor:pointer;padding:2px 6px" title="Удалить">✕</button></div>` : ''}
         </a>`;
       }).join('')}
     </div>
@@ -854,6 +866,38 @@ function renderEvent() {
 
 function openAddPartner() {
   if (!isAdmin()) { toast('Только администратор может добавлять партнёров'); return; }
+  document.getElementById('partner-edit-index').value = '-1';
+  document.getElementById('partner-modal-title').textContent = 'Добавить партнёра';
+  document.getElementById('partner-modal-btn').textContent = 'ДОБАВИТЬ';
+  document.getElementById('partner-name').value = '';
+  document.getElementById('partner-url').value = '';
+  const desc = document.getElementById('partner-desc');
+  desc.value = ''; desc.style.height = 'auto';
+  document.getElementById('partner-logo-url').value = '';
+  document.getElementById('partner-logo-preview').style.display = 'none';
+  document.getElementById('partner-logo-btn').textContent = '+ Загрузить логотип';
+  document.getElementById('partner-logo-input').value = '';
+  document.getElementById('partner-modal').classList.add('open');
+}
+
+function openEditPartner(i) {
+  if (!isAdmin()) return;
+  const p = getPartners()[i]; if (!p) return;
+  document.getElementById('partner-edit-index').value = String(i);
+  document.getElementById('partner-modal-title').textContent = 'Редактировать партнёра';
+  document.getElementById('partner-modal-btn').textContent = 'СОХРАНИТЬ';
+  document.getElementById('partner-name').value = p.name || '';
+  document.getElementById('partner-url').value = p.url || '';
+  const desc = document.getElementById('partner-desc');
+  desc.value = p.desc || '';
+  desc.style.height = 'auto';
+  desc.style.height = desc.scrollHeight + 'px';
+  const logoUrl = p.logoUrl || '';
+  document.getElementById('partner-logo-url').value = logoUrl;
+  const preview = document.getElementById('partner-logo-preview');
+  if (logoUrl) { preview.src = logoUrl; preview.style.display = 'block'; document.getElementById('partner-logo-btn').textContent = '↺ Заменить логотип'; }
+  else { preview.style.display = 'none'; document.getElementById('partner-logo-btn').textContent = '+ Загрузить логотип'; }
+  document.getElementById('partner-logo-input').value = '';
   document.getElementById('partner-modal').classList.add('open');
 }
 
@@ -888,7 +932,7 @@ async function onPartnerLogoChange(e) {
   btn.disabled = false;
 }
 
-function addPartner() {
+function savePartnerModal() {
   const name = document.getElementById('partner-name').value.trim();
   const url = document.getElementById('partner-url').value.trim();
   const desc = document.getElementById('partner-desc').value.trim();
@@ -896,18 +940,18 @@ function addPartner() {
   if (!name || !url) { toast('Укажите название и ссылку'); return; }
   const fullUrl = url.startsWith('http') ? url : 'https://' + url;
   const partners = getPartners();
-  partners.push({ name, url: fullUrl, desc, logoUrl });
+  const editIdx = parseInt(document.getElementById('partner-edit-index').value);
+  const entry = { name, url: fullUrl, desc, logoUrl };
+  if (editIdx >= 0 && editIdx < partners.length) {
+    partners[editIdx] = { ...partners[editIdx], ...entry };
+    toast('Партнёр обновлён!');
+  } else {
+    partners.push(entry);
+    toast('Партнёр добавлен!');
+  }
   savePartners(partners);
   document.getElementById('partner-modal').classList.remove('open');
-  document.getElementById('partner-name').value = '';
-  document.getElementById('partner-url').value = '';
-  document.getElementById('partner-desc').value = '';
-  document.getElementById('partner-logo-url').value = '';
-  document.getElementById('partner-logo-preview').style.display = 'none';
-  document.getElementById('partner-logo-btn').textContent = '+ Загрузить логотип';
-  document.getElementById('partner-logo-input').value = '';
   renderEvent();
-  toast('Партнёр добавлен!');
 }
 
 function removePartner(i) {
@@ -2010,6 +2054,7 @@ function openDetail(row) {
         </div>
         ${isMe ? `<div style="display:inline-flex;flex-direction:column;gap:4px;align-self:flex-start">
           <button onclick="logout()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer">↪ Выход</button>
+          ${p['qr_link']?`<button onclick="openQR('${p['qr_link']}')" style="background:transparent;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer">QR 📲</button>`:''}
           <div style="display:flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid var(--border);border-radius:8px">
             <span style="font-size:10px;color:var(--muted);line-height:1.3;max-width:80px">Показывать<br>имя публично<br><span style="font-size:8px;opacity:.6">иначе «Участник DGR»</span></span>
             <label style="position:relative;display:inline-block;width:30px;height:16px;flex-shrink:0;cursor:pointer">
@@ -2095,11 +2140,15 @@ function openDetail(row) {
     </div>`;
   document.getElementById('detail-view').style.display='block';
   document.getElementById('detail-view').scrollTop=0;
-  history.pushState({detail: true}, '');
+  history.pushState({}, '', '#participant=' + row);
 }
 
 function openMyProfile() { if (currentUser&&!currentUser.isGuest) openDetail(currentUser.row); else openAuthModal('Войдите как участник'); }
-function closeDetail() { clearSelectionUI(); document.getElementById('detail-view').style.display='none'; renderAll(); }
+function openQR(url) {
+  document.getElementById('qr-img').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+  document.getElementById('qr-modal').classList.add('open');
+}
+function closeDetail() { clearSelectionUI(); document.getElementById('detail-view').style.display='none'; history.pushState({}, '', window.location.pathname + window.location.search); renderAll(); }
 
 // UPLOAD
 function startUpload(type, fromTab) {
@@ -4468,17 +4517,18 @@ function declineConsent() {
   </div>
 </div>
 
-<!-- ADD PARTNER MODAL -->
+<!-- ADD/EDIT PARTNER MODAL -->
 <div class="modal-overlay" id="partner-modal">
   <div class="modal-sheet">
-    <div class="modal-title">Добавить партнёра</div>
+    <input type="hidden" id="partner-edit-index" value="-1">
+    <div class="modal-title" id="partner-modal-title">Добавить партнёра</div>
     <div class="modal-sub">Заполните информацию о партнёре мероприятия</div>
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Название</div>
     <input class="field" id="partner-name" placeholder="Название компании">
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ссылка на сайт</div>
     <input class="field" id="partner-url" placeholder="https://example.com">
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Описание (необязательно)</div>
-    <input class="field" id="partner-desc" placeholder="Краткое описание">
+    <textarea class="field" id="partner-desc" placeholder="Краткое описание" rows="2" style="resize:none;overflow:hidden;min-height:44px" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
     <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Логотип (необязательно)</div>
     <input type="hidden" id="partner-logo-url">
     <input type="file" id="partner-logo-input" accept="image/*" style="display:none" onchange="onPartnerLogoChange(event)">
@@ -4486,7 +4536,7 @@ function declineConsent() {
       <button id="partner-logo-btn" type="button" onclick="document.getElementById('partner-logo-input').click()" style="background:var(--card);border:1.5px dashed var(--border);color:var(--muted);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif">+ Загрузить логотип</button>
       <img id="partner-logo-preview" src="" alt="" style="display:none;width:44px;height:44px;border-radius:8px;object-fit:cover;border:1px solid var(--border)">
     </div>
-    <button class="modal-btn" onclick="lbBtnAction(this,addPartner)">ДОБАВИТЬ</button>
+    <button class="modal-btn" id="partner-modal-btn" onclick="lbBtnAction(this,savePartnerModal)">ДОБАВИТЬ</button>
     <button class="modal-btn ghost" onclick="document.getElementById('partner-modal').classList.remove('open')">Отмена</button>
   </div>
 </div>
@@ -4514,6 +4564,16 @@ function declineConsent() {
     <textarea class="field" id="pr-message" rows="4" style="resize:vertical;height:100px" placeholder="Кратко о сотрудничестве..."></textarea>
     <button class="modal-btn" onclick="lbBtnAction(this,sendPartnerRequest)">ОТПРАВИТЬ</button>
     <button class="modal-btn ghost" onclick="document.getElementById('partner-request-modal').classList.remove('open')">Отмена</button>
+  </div>
+</div>
+
+<!-- QR MODAL -->
+<div class="modal-overlay" id="qr-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-sheet" style="align-items:center">
+    <div class="modal-title">Мой QR-код</div>
+    <div class="modal-sub">Отсканируйте для открытия профиля</div>
+    <img id="qr-img" src="" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--gold);margin:12px 0">
+    <button class="modal-btn ghost" onclick="document.getElementById('qr-modal').classList.remove('open')">Закрыть</button>
   </div>
 </div>
 
