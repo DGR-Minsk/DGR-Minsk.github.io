@@ -2067,6 +2067,18 @@ function openDetail(row) {
   ].filter(([,v])=>v!==undefined&&v!==null&&v!=='');
   const purls = gpurls(p);
 
+  // Строим множество всех «живых» URL из галереи и полей участников
+  const _liveUrls = new Set([
+    ...gallery.map(ph => ph.photo_url),
+    ...participants.flatMap(pr => [gcb(pr), gcs(pr), gl(pr), gp(pr), gpt(pr)].filter(Boolean))
+  ]);
+  // Оставляем в избранном только те фото, которые ещё существуют в источнике
+  const activePurls = purls.filter(u => _liveUrls.has(u));
+  // Автоматически зачищаем устаревшие ссылки на сервере
+  if (isMe && activePurls.length < purls.length) {
+    apiPost({action:'updateParticipant', row:p._row, fields:{gallery_urls: JSON.stringify(activePurls)}}).catch(()=>{});
+  }
+
   document.getElementById('detail-title').textContent = p['ФИО'];
   document.getElementById('detail-body').innerHTML = `
     <div class="detail-body" style="padding-top:16px">
@@ -2161,11 +2173,11 @@ function openDetail(row) {
             ${myUploads2.map(ph=>`<div class="personal-gallery-item${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' selected':''}" onclick="if(_selectMode==='uploads'){handleGalleryClick(this,'uploads','${ph.photo_url}',null)}else{openUploadedPhoto('${ph.photo_url}','',${ph._row})}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'uploads','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)"><div class="sel-circle${_selectMode==='uploads'&&_selectedItems.has(ph.photo_url)?' checked':''}" ></div><img src="${px(ph.photo_url)}" loading="lazy"></div>`).join('')}
             <div class="personal-gallery-add" onclick="startUpload('personal_gallery')"><span style="font-size:20px">+</span><span>Загрузить</span></div>
           </div>` : ''}
-          <div class="section-title" style="margin-top:14px;display:${isMe?'flex':'none'};align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&purls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
+          <div class="section-title" style="margin-top:14px;display:${isMe?'flex':'none'};align-items:center;justify-content:space-between"><span>Избранное</span>${isMe&&activePurls.length?`<button onclick="toggleSelectMode('favorites')" style="background:none;border:1px solid var(--border);color:${_selectMode==='favorites'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='favorites'?'✓ Выбор':'☐'}</button>`:''}</span></div>
           <div class="personal-gallery${_selectMode==='favorites'?' in-select-mode':''}" data-select-mode="favorites" style="display:${isMe?'grid':'none'}">
-            ${purls.map((url,i)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
+            ${activePurls.map((url)=>`<div class="personal-gallery-item${_selectMode==='favorites'&&_selectedItems.has(url)?' selected':''}" onclick="if(_selectMode==='favorites'){handleGalleryClick(this,'favorites','${url}',null)}else{openPersonalPhoto('${url}','')}" oncontextmenu="event.preventDefault();return false" ontouchstart="startLongPress(this,'favorites','${url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)"><div class="sel-circle${_selectMode==='favorites'&&_selectedItems.has(url)?' checked':''}" ></div><img src="${px(url)}" loading="lazy"></div>`).join('')}
             ${isMe?`<div class="personal-gallery-add" onclick="openGalleryPickerForFav()"><span style="font-size:20px">★</span><span>Добавить</span></div>`:''}
-            ${!purls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
+            ${!activePurls.length?`<div style="color:var(--muted);font-size:12px;padding:10px;font-style:italic">${isMe?'Выберите фото из галереи':'Нет избранного'}</div>`:''}
           </div>`;
       })()}
     </div>`;
@@ -3634,6 +3646,40 @@ function resetAdminTimings() {
   renderAdminSettings();
 }
 
+// Вшивает pHYs chunk (DPI метаданные) в готовый PNG blob
+// 300 DPI + 590px ширины = ровно 5 см при печати
+async function _setPngDpi(blob, dpi) {
+  const buf = await blob.arrayBuffer();
+  const src = new Uint8Array(buf);
+  // Проверяем PNG-сигнатуру
+  const sig = [137,80,78,71,13,10,26,10];
+  for (let i=0;i<8;i++) if(src[i]!==sig[i]) return blob;
+  // CRC-32 table (стандартный полином PNG)
+  const tbl = new Uint32Array(256);
+  for (let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;tbl[n]=c;}
+  function crc32(d){let c=0xFFFFFFFF;for(let i=0;i<d.length;i++)c=(c>>>8)^tbl[(c^d[i])&0xFF];return(c^0xFFFFFFFF)>>>0;}
+  // pHYs data: X ppm (4b) + Y ppm (4b) + unit=1/metre (1b) = 9 bytes
+  const ppm = Math.round(dpi / 0.0254);
+  const phData = new Uint8Array(9);
+  for(let i=0;i<4;i++){phData[i]=(ppm>>>(24-i*8))&0xFF; phData[4+i]=(ppm>>>(24-i*8))&0xFF;}
+  phData[8] = 1;
+  // type "pHYs" = [0x70,0x48,0x59,0x73]
+  const typeData = new Uint8Array([0x70,0x48,0x59,0x73,...phData]);
+  const cs = crc32(typeData);
+  // Собираем chunk: len(4) + type+data(13) + crc(4) = 21 байт
+  const chunk = new Uint8Array(21);
+  chunk[3]=9; // length=9 (big-endian, старшие байты = 0)
+  chunk.set(typeData,4);
+  chunk[17]=(cs>>>24)&0xFF; chunk[18]=(cs>>>16)&0xFF; chunk[19]=(cs>>>8)&0xFF; chunk[20]=cs&0xFF;
+  // Вставляем chunk сразу после IHDR (8 sig + 4+4+13+4 = offset 33)
+  const ihdrEnd = 33;
+  const out = new Uint8Array(src.length + chunk.length);
+  out.set(src.slice(0, ihdrEnd));
+  out.set(chunk, ihdrEnd);
+  out.set(src.slice(ihdrEnd), ihdrEnd + chunk.length);
+  return new Blob([out], {type:'image/png'});
+}
+
 async function _makeQRBlob(data, logoDataUrl, size, label) {
   const qr = new QRCodeStyling({
     width: size, height: size,
@@ -3722,7 +3768,8 @@ async function bulkDownloadQR(btn) {
     const p = withQR[i];
     btn.textContent = `Генерация ${i+1}/${withQR.length}…`;
     const label = p['row_id'] || p._row;
-    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 590, label);
+    let blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 590, label);
+    blob = await _setPngDpi(blob, 300); // 300 dpi = 5 см при 590px
     const fname = label + '_' + (p['ФИО']||'participant').replace(/[\s/\\]/g,'-') + '.png';
     zip.file(fname, blob);
   }
