@@ -1581,7 +1581,7 @@ function openGuestCabinet() {
 }
 
 function openPhotographerCabinet() {
-  if (_selectMode === 'gallery') { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
+  if (_selectMode && _selectMode !== 'photographer') clearSelectionUI();
   const myPhotos = gallery.filter(ph => ph.owner_name === currentUser.name);
   const limit = currentUser.isPhotographer ? getPhotographerLimit() : (currentUser.data ? parseInt(currentUser.data['photo_limit']) || 0 : 0);
   const limitStr = limit > 0 ? ` / ${limit}` : '';
@@ -1973,7 +1973,7 @@ function renderGallery() {
 // DETAIL
 function openDetail(row) {
   const p = participants.find(x=>x._row==row); if (!p) return;
-  if (_selectMode === 'gallery') { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
+  if (_selectMode === 'gallery' || _selectMode === 'photographer') clearSelectionUI();
   currentRecord=p;
 
   const isMe = currentUser&&!currentUser.isGuest&&currentUser.row==row;
@@ -2752,32 +2752,33 @@ function applySelectModeClasses() {
   });
 }
 
+function clearSelectionUI() {
+  if (!_selectMode) return;
+  _selectMode = null;
+  _selectedItems.clear();
+  renderSelectBar();
+  document.querySelectorAll('.gallery-item.selected,.personal-gallery-item.selected').forEach(el => {
+    el.classList.remove('selected');
+    const c = el.querySelector('.sel-circle');
+    if (c) { c.classList.remove('checked'); c.style.display = 'none'; }
+  });
+  applySelectModeClasses();
+}
+
 // Долгое нажатие для мобильных
 let _longPressTimer = null;
 let _longPressActivated = false;
+let _touchSelectionHandled = false;
 function startLongPress(el, mode, key) {
   _longPressActivated = false;
   _longPressTimer = setTimeout(() => {
     _longPressActivated = true;
     _longPressTimer = null;
+    if (navigator.vibrate) navigator.vibrate(40);
     if (!_selectMode) {
+      // Добавляем ключ ДО рендера — toggleSelectMode увидит его в _selectedItems
+      _selectedItems.add(key);
       toggleSelectMode(mode);
-      // Сразу выбрать фото которое вызвало longpress
-      setTimeout(() => {
-        _selectedItems.add(key);
-        // Найти элемент после перерендера — ищем по всем возможным селекторам
-        const allItems = document.querySelectorAll('.gallery-item, .personal-gallery-item');
-        for (const item of allItems) {
-          const lpk = item.getAttribute('data-lpkey') || item.getAttribute('ontouchstart')?.match(/startLongPress\(this,'[^']+','([^']+)'\)/)?.[1];
-          if (lpk === key) {
-            item.classList.add('selected');
-            const c = item.querySelector('.sel-circle');
-            if (c) { c.classList.add('checked'); c.style.display='flex'; }
-            break;
-          }
-        }
-        renderSelectBar();
-      }, 100);
     } else {
       toggleSelectItem(key);
       const isSelected = _selectedItems.has(key);
@@ -2786,18 +2787,16 @@ function startLongPress(el, mode, key) {
       if (c) { c.classList.toggle('checked', isSelected); c.style.display='flex'; }
       renderSelectBar();
     }
-    if (navigator.vibrate) navigator.vibrate(40);
   }, 350);
 }
 function cancelLongPress(event) {
-  if (_longPressTimer) { 
-    clearTimeout(_longPressTimer); 
+  _touchSelectionHandled = false;
+  if (_longPressTimer) {
+    clearTimeout(_longPressTimer);
     _longPressTimer = null;
-    // Короткий тап (не longpress) в режиме выбора — тоже выделить/снять
     if (_selectMode && event.type === 'touchend') {
       const el = event.target.closest('.gallery-item, .personal-gallery-item');
       if (el) {
-        const lpk = el.getAttribute('data-lpkey');
         const ontouchstart = el.getAttribute('ontouchstart') || '';
         const keyMatch = ontouchstart.match(/startLongPress\(this,'([^']+)','([^']+)'\)/);
         if (keyMatch && keyMatch[1] === _selectMode) {
@@ -2808,6 +2807,7 @@ function cancelLongPress(event) {
           const c = el.querySelector('.sel-circle');
           if (c) { c.classList.toggle('checked', isSelected); c.style.display='flex'; }
           renderSelectBar();
+          _touchSelectionHandled = true;
           event.preventDefault();
         }
       }
@@ -2815,11 +2815,8 @@ function cancelLongPress(event) {
   }
 }
 function handleGalleryClick(el, mode, key, openFn) {
-  if (_longPressActivated) {
-    // Longpress уже выбрал фото в startLongPress — просто сбрасываем флаг
-    _longPressActivated = false;
-    return;
-  }
+  if (_longPressActivated) { _longPressActivated = false; return; }
+  if (_touchSelectionHandled) { _touchSelectionHandled = false; return; }
   if (_selectMode === mode) {
     toggleSelectItem(key);
     const isSelected = _selectedItems.has(key);
@@ -2967,7 +2964,7 @@ function initNavIcons() {
 function goAbout() { switchTab(4); }
 let _currentTab = 0;
 function switchTab(i) {
-  if (_selectMode) { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
+  if (_selectMode) clearSelectionUI();
   _currentTab = i;
   if (i===4) renderEvent();
   document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
@@ -4558,7 +4555,7 @@ function declineConsent() {
 
 <div id="photographer-cabinet" style="display:none;position:fixed;inset:0;background:var(--black);z-index:300;overflow-y:auto;max-width:480px;margin:0 auto;padding-bottom:40px">
   <div style="position:sticky;top:0;background:rgba(8,8,8,.97);padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;z-index:10">
-    <button onclick="if(_selectMode==='photographer'){_selectMode=null;_selectedItems.clear();renderSelectBar();}document.getElementById('photographer-cabinet').style.display='none'" style="background:none;border:none;color:var(--gold);font-size:24px;cursor:pointer;line-height:1">←</button>
+    <button onclick="clearSelectionUI();document.getElementById('photographer-cabinet').style.display='none'" style="background:none;border:none;color:var(--gold);font-size:24px;cursor:pointer;line-height:1">←</button>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--gold)">📷 МОЙ КАБИНЕТ</div>
   </div>
   <div style="padding:14px">
