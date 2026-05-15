@@ -709,45 +709,116 @@ function syncUserData(me) {
   localStorage.setItem('dgr_user', JSON.stringify(currentUser));
 }
 
-async function loadData(force=false) {
-  const isFirstLoad = !participants.length;
-  // Использовать sessionStorage кэш если данные свежие (< 30 сек)
-  const cacheKey = 'dgr_cache';
-  const cacheTs = parseInt(sessionStorage.getItem('dgr_cache_ts')||'0');
-  const cacheAge = Date.now() - cacheTs;
-  if (!force && !isFirstLoad && cacheAge < 30000) return; // данные свежие
-  if (!isFirstLoad) showLoad(true);
+// ── КЭШ ────────────────────────────────────────────────────
+const _CACHE_TTL   = 5 * 60 * 1000; // 5 минут — кэш считается свежим
+const _CACHE_STALE = 30 * 60 * 1000; // 30 минут — кэш устарел, грузим заново с экраном
+
+function _saveCache(data) {
   try {
-    const [p, g, r] = await Promise.all([
-      api({action:'getParticipants'}),
-      api({action:'getGallery'}),
-      api({action:'getReactions'})
-    ]);
-    participants = p.participants || [];
-    gallery = g.photos || [];
-    reactions = r.reactions || [];
-    // Загрузить тайминги с сервера (фоново, не блокирует)
-    loadTimingsFromServer();
-    // Загрузить партнёров с сервера
-    loadPartnersFromServer();
-    if (currentUser && !currentUser.isGuest) {
-      if (!currentUser.isAdmin) {
-        const me = participants.find(x => x._row == currentUser.row);
-        if (me) {
-          syncUserData(me);
-        }
-        // Load notifications in background
-        loadNotifications();
-      } else {
-        // Для админа — сразу обновить бейдж по localStorage (запросы уже там)
-        updateNotifBadge();
-      }
+    localStorage.setItem('dgr_data_cache', JSON.stringify({ts: Date.now(), ...data}));
+  } catch(e) {}
+}
+function _loadCache() {
+  try {
+    const raw = localStorage.getItem('dgr_data_cache');
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (!c.ts) return null;
+    return c;
+  } catch(e) { return null; }
+}
+function _applyCache(c) {
+  if (!c) return false;
+  if (c.participants) participants = c.participants;
+  if (c.gallery)      gallery      = c.gallery;
+  if (c.reactions)    reactions    = c.reactions;
+  return participants.length > 0;
+}
+
+async function _fetchAll() {
+  const [p, g, r] = await Promise.all([
+    api({action:'getParticipants'}),
+    api({action:'getGallery'}),
+    api({action:'getReactions'})
+  ]);
+  participants = p.participants || [];
+  gallery      = g.photos      || [];
+  reactions    = r.reactions   || [];
+  _saveCache({participants, gallery, reactions});
+}
+
+async function loadData(force=false) {
+  const cache    = _loadCache();
+  const cacheAge = cache ? Date.now() - cache.ts : Infinity;
+
+  if (!force && cacheAge < _CACHE_TTL) {
+    // Данные свежие (< 5 мин) — ничего не делаем
+    _applyCache(cache);
+    _afterLoad();
+    return;
+  }
+
+  if (!force && cacheAge < _CACHE_STALE && _applyCache(cache)) {
+    // Кэш немного устарел (5–30 мин) — показываем мгновенно, обновляем в фоне
+    _afterLoad();
+    renderAll();
+    _fetchAll().then(() => { _afterLoad(); renderAll(); }).catch(()=>{});
+    return;
+  }
+
+  // Кэша нет или принудительное обновление
+  if (!force && !cache) {
+    // Холодный старт: грузим участников первыми → показываем список → остальное фоново
+    showLoad(true);
+    try {
+      const p = await api({action:'getParticipants'});
+      participants = p.participants || [];
+      showLoad(false);
+      _afterLoad();
+      renderAll();
+      // Галерея и реакции — в фоне
+      Promise.all([api({action:'getGallery'}), api({action:'getReactions'})]).then(([g, r]) => {
+        gallery   = g.photos    || [];
+        reactions = r.reactions || [];
+        _saveCache({participants, gallery, reactions});
+        renderAll();
+      }).catch(()=>{});
+    } catch(e) {
+      console.error('Load error:', e);
+      showLoad(false);
+      toast('Ошибка загрузки. Проверьте соединение.');
     }
-  } catch(e) { 
+    return;
+  }
+
+  // Принудительное обновление (после действий: загрузка фото, голосование и т.п.)
+  showLoad(true);
+  try {
+    await _fetchAll();
+  } catch(e) {
     console.error('Load error:', e);
-    toast('Ошибка загрузки. Проверьте соединение.');
+    if (_applyCache(cache)) {
+      toast('Нет соединения — показаны кэшированные данные');
+    } else {
+      toast('Ошибка загрузки. Проверьте соединение.');
+    }
   }
   showLoad(false);
+  _afterLoad();
+}
+
+function _afterLoad() {
+  loadTimingsFromServer();
+  loadPartnersFromServer();
+  if (currentUser && !currentUser.isGuest) {
+    if (!currentUser.isAdmin) {
+      const me = participants.find(x => x._row == currentUser.row);
+      if (me) syncUserData(me);
+      loadNotifications();
+    } else {
+      updateNotifBadge();
+    }
+  }
 }
 
 function showLoad(v) { document.getElementById('loading-screen').style.display = v ? 'flex' : 'none'; }
