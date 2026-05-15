@@ -472,8 +472,12 @@ const WRITE_TOKEN = 'dgr2026_msk_7x9k2p1qq';
 
 // ── ТАЙМИНГИ: загрузка фото и голосование ──
 const DEFAULT_TIMINGS = {
-  photo_start: null,         // null = всегда можно
-  photo_end: null,           // null = не ограничено  
+  photo_start: null,              // null = всегда можно
+  photo_end: null,                // null = не ограничено
+  contest_bike_start: null,       // ТОП Байк: начало загрузки
+  contest_bike_end: null,         // ТОП Байк: конец загрузки
+  contest_style_start: null,      // ТОП Стиль: начало загрузки
+  contest_style_end: null,        // ТОП Стиль: конец загрузки
   vote_start: '2026-05-17T09:00:00',
   vote_end: '2026-05-17T18:00:00'
 };
@@ -522,6 +526,24 @@ function isPhotoUploadOpen() {
   if (t.photo_start && now < new Date(t.photo_start).getTime()) return false;
   if (t.photo_end && now > new Date(t.photo_end).getTime()) return false;
   return true;
+}
+function _isWindowOpen(startKey, endKey) {
+  const t = getTimings();
+  const now = Date.now();
+  if (t[startKey] && now < new Date(t[startKey]).getTime()) return false;
+  if (t[endKey] && now > new Date(t[endKey]).getTime()) return false;
+  return true;
+}
+function isContestBikeOpen() {
+  const t = getTimings();
+  // Если отдельные тайминги не заданы — используем общий photo window
+  if (!t.contest_bike_start && !t.contest_bike_end) return isPhotoUploadOpen();
+  return _isWindowOpen('contest_bike_start', 'contest_bike_end');
+}
+function isContestStyleOpen() {
+  const t = getTimings();
+  if (!t.contest_style_start && !t.contest_style_end) return isPhotoUploadOpen();
+  return _isWindowOpen('contest_style_start', 'contest_style_end');
 }
 function isVotingOpen() {
   const t = getTimings();
@@ -1729,7 +1751,9 @@ function logout() {
   document.getElementById('logout-modal').classList.add('open');
 }
 function confirmLogout() {
-  localStorage.removeItem('dgr_user'); location.reload();
+  localStorage.removeItem('dgr_user');
+  history.replaceState({}, '', window.location.pathname + window.location.search);
+  location.reload();
 }
 
 function isAdmin() { return currentUser && currentUser.isAdmin; }
@@ -2182,16 +2206,31 @@ function startUpload(type, fromTab) {
   if (currentUser.isGuest) { openAuthModal('Войдите как участник или фотограф чтобы загружать фото'); return; }
   if (currentUser.isPhotographer && type !== 'gallery_general') { toast('Фотографы могут загружать только в общую галерею'); return; }
   // Проверка таймингов загрузки (админ не ограничен)
-  if (!isAdmin() && !isPhotoUploadOpen()) {
+  if (!isAdmin()) {
     const t = getTimings();
+    const now = Date.now();
     const typeNames = {contest_bike:'ТОП Байк', contest_style:'ТОП Стиль', live_photo:'живое фото', portrait:'фото профиля', gallery_general:'фото в галерею'};
     const typeName = typeNames[type] || 'фото';
-    if (t.photo_start && Date.now() < new Date(t.photo_start).getTime()) {
-      toast(`Загрузка ${typeName} станет возможна после ${formatTimingDate(t.photo_start)}`);
+    let open = true, startKey = null;
+    if (type === 'contest_bike') {
+      open = isContestBikeOpen();
+      startKey = (t.contest_bike_start && !t.contest_bike_end) || t.contest_bike_start ? 'contest_bike_start' : 'photo_start';
+    } else if (type === 'contest_style') {
+      open = isContestStyleOpen();
+      startKey = (t.contest_style_start && !t.contest_style_end) || t.contest_style_start ? 'contest_style_start' : 'photo_start';
     } else {
-      toast('Загрузка фото закрыта');
+      open = isPhotoUploadOpen();
+      startKey = 'photo_start';
     }
-    return;
+    if (!open) {
+      const startTime = t[startKey];
+      if (startTime && now < new Date(startTime).getTime()) {
+        toast(`Загрузка «${typeName}» станет возможна после ${formatTimingDate(startTime)}`);
+      } else {
+        toast(`Загрузка «${typeName}» закрыта`);
+      }
+      return;
+    }
   }
   if (type === 'gallery_general' && !isAdmin()) {
     let lim;
@@ -3388,12 +3427,15 @@ async function renderAdminGuests() {
   const blocked = await getBlockedListCached();
   // Объединяем: сервер (Согласия) + localStorage текущего устройства
   let guests = [];
+  let serverError = null;
   try {
     const res = await api({action:'getGuests'});
-    if (res && res.guests) {
-      guests = res.guests.map(g => ({ email: g.email, name: g.name, role: g.role }));
+    if (res && res.error) {
+      serverError = res.error;
+    } else if (res && res.guests) {
+      guests = res.guests.map(g => ({ email: String(g.email||'').trim(), name: g.name||'', role: g.role||'guest' })).filter(g=>g.email);
     }
-  } catch(e) {}
+  } catch(e) { serverError = e.message || 'Ошибка сети'; }
   // Добавляем из localStorage если не дублируется
   const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
   for (const [email, data] of Object.entries(verified)) {
@@ -3401,7 +3443,11 @@ async function renderAdminGuests() {
       guests.push({ email, ...data });
     }
   }
-  if (!guests.length) { el.innerHTML='<div class="empty">Нет зарегистрированных гостей</div>'; return; }
+  if (!guests.length) {
+    el.innerHTML = `<div class="empty">Нет зарегистрированных гостей${serverError ? `<br><span style="font-size:10px;color:#e53935;margin-top:6px;display:block">⚠ Ошибка сервера: ${serverError}<br>Проверьте деплой Apps Script</span>` : ''}</div>
+    <button onclick="renderAdminGuests()" style="margin:12px auto;display:block;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px 20px;font-weight:700;font-size:12px;cursor:pointer">↺ Обновить</button>`;
+    return;
+  }
   el.innerHTML = guests.map((g,i) => {
     const isBlocked = blocked.some(b=>b.key===g.email.toLowerCase());
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px${isBlocked?';opacity:0.6':''}">
@@ -3417,7 +3463,7 @@ async function renderAdminGuests() {
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + `<button onclick="renderAdminGuests()" style="margin:12px auto;display:block;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 20px;font-weight:700;font-size:11px;cursor:pointer">↺ Обновить список</button>`;
 }
 
 async function adminToggleBlockUser(email, name, type) {
@@ -3450,17 +3496,26 @@ async function renderAdminPhotographers() {
   const blocked = await getBlockedListCached();
   // Загружаем с сервера, дополняем из localStorage
   let approved = [];
+  let serverError = null;
   try {
     const res = await api({action:'getPhotographers'});
-    if (res && res.photographers) approved = res.photographers;
-  } catch(e) {}
+    if (res && res.error) {
+      serverError = res.error;
+    } else if (res && res.photographers) {
+      approved = res.photographers;
+    }
+  } catch(e) { serverError = e.message || 'Ошибка сети'; }
   const local = JSON.parse(localStorage.getItem('dgr_approved_photographers')||'[]');
   for (const p of local) {
     if (!approved.find(a => a.email && a.email.toLowerCase() === (p.email||'').toLowerCase())) {
       approved.push(p);
     }
   }
-  if (!approved.length) { el.innerHTML='<div class="empty">Нет одобренных фотографов</div>'; return; }
+  if (!approved.length) {
+    el.innerHTML = `<div class="empty">Нет одобренных фотографов${serverError ? `<br><span style="font-size:10px;color:#e53935;margin-top:6px;display:block">⚠ Ошибка сервера: ${serverError}<br>Проверьте деплой Apps Script</span>` : ''}</div>
+    <button onclick="renderAdminPhotographers()" style="margin:12px auto;display:block;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:8px 20px;font-weight:700;font-size:12px;cursor:pointer">↺ Обновить</button>`;
+    return;
+  }
   el.innerHTML = approved.map((p,i) => {
     const isBlocked = blocked.some(b=>b.key===p.email.toLowerCase());
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px${isBlocked?';opacity:0.6':''}">
@@ -3477,7 +3532,7 @@ async function renderAdminPhotographers() {
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + `<button onclick="renderAdminPhotographers()" style="margin:12px auto;display:block;background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 20px;font-weight:700;font-size:11px;cursor:pointer">↺ Обновить список</button>`;
 }
 function adminSwitchTab(t) {
   ['p','g','r','u','ph','s'].forEach(x => {
@@ -3498,26 +3553,52 @@ function renderAdminSettings() {
   const el = document.getElementById('admin-timings-body');
   const toInput = (iso) => iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
   el.innerHTML = `
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📸 Загрузка фото (галерея / живое)</div>
     <div style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Загрузка фото: начало</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Начало</div>
       <input type="datetime-local" id="t-photo-start" class="field" value="${toInput(t.photo_start)}">
     </div>
     <div style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Загрузка фото: конец</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Конец</div>
       <input type="datetime-local" id="t-photo-end" class="field" value="${toInput(t.photo_end)}">
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Если пусто — используется для конкурсных фото как резерв</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-top:1px solid var(--border);padding-top:12px">🏍 ТОП Байк: конкурсные фото</div>
     <div style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Голосование: начало</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Начало</div>
+      <input type="datetime-local" id="t-contest-bike-start" class="field" value="${toInput(t.contest_bike_start)}">
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Конец</div>
+      <input type="datetime-local" id="t-contest-bike-end" class="field" value="${toInput(t.contest_bike_end)}">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Если пусто — используются тайминги «Загрузка фото» выше</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-top:1px solid var(--border);padding-top:12px">👔 ТОП Стиль: конкурсные фото</div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Начало</div>
+      <input type="datetime-local" id="t-contest-style-start" class="field" value="${toInput(t.contest_style_start)}">
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Конец</div>
+      <input type="datetime-local" id="t-contest-style-end" class="field" value="${toInput(t.contest_style_end)}">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Если пусто — используются тайминги «Загрузка фото» выше</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-top:1px solid var(--border);padding-top:12px">🗳 Голосование</div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Начало</div>
       <input type="datetime-local" id="t-vote-start" class="field" value="${toInput(t.vote_start)}">
     </div>
     <div style="margin-bottom:14px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Голосование: конец</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Конец</div>
       <input type="datetime-local" id="t-vote-end" class="field" value="${toInput(t.vote_end)}">
     </div>
     <button onclick="saveAdminTimings()" class="modal-btn" style="background:#e53935;margin-bottom:8px">СОХРАНИТЬ ТАЙМИНГИ</button>
     <button onclick="resetAdminTimings()" class="modal-btn ghost" style="font-size:11px">Сбросить к по умолчанию</button>
     <div style="margin-top:12px;font-size:11px;color:var(--muted)">
-      Сейчас: загрузка фото ${isPhotoUploadOpen()?'<span style="color:#4caf50">открыта</span>':'<span style="color:#e53935">закрыта</span>'} · голосование ${isVotingOpen()?'<span style="color:#4caf50">открыто</span>':'<span style="color:#e53935">закрыто</span>'}
+      Сейчас: загрузка фото ${isPhotoUploadOpen()?'<span style="color:#4caf50">открыта</span>':'<span style="color:#e53935">закрыта</span>'} · ТОП Байк ${isContestBikeOpen()?'<span style="color:#4caf50">открыт</span>':'<span style="color:#e53935">закрыт</span>'} · ТОП Стиль ${isContestStyleOpen()?'<span style="color:#4caf50">открыт</span>':'<span style="color:#e53935">закрыт</span>'} · голосование ${isVotingOpen()?'<span style="color:#4caf50">открыто</span>':'<span style="color:#e53935">закрыто</span>'}
     </div>
     <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
       <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px">QR-коды участников</div>
@@ -3533,14 +3614,16 @@ function renderAdminSettings() {
 
 function saveAdminTimings() {
   const t = getTimings();
-  const ps = document.getElementById('t-photo-start').value;
-  const pe = document.getElementById('t-photo-end').value;
-  const vs = document.getElementById('t-vote-start').value;
-  const ve = document.getElementById('t-vote-end').value;
-  t.photo_start = ps ? new Date(ps).toISOString() : null;
-  t.photo_end = pe ? new Date(pe).toISOString() : null;
-  t.vote_start = vs ? new Date(vs).toISOString() : null;
-  t.vote_end = ve ? new Date(ve).toISOString() : null;
+  const v = id => document.getElementById(id)?.value || '';
+  const toISO = s => s ? new Date(s).toISOString() : null;
+  t.photo_start          = toISO(v('t-photo-start'));
+  t.photo_end            = toISO(v('t-photo-end'));
+  t.contest_bike_start   = toISO(v('t-contest-bike-start'));
+  t.contest_bike_end     = toISO(v('t-contest-bike-end'));
+  t.contest_style_start  = toISO(v('t-contest-style-start'));
+  t.contest_style_end    = toISO(v('t-contest-style-end'));
+  t.vote_start           = toISO(v('t-vote-start'));
+  t.vote_end             = toISO(v('t-vote-end'));
   saveTimingsToServer(t);
   toast('Тайминги сохранены');
   renderAdminSettings();
