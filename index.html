@@ -632,7 +632,7 @@ window.onload = async () => {
       updateUserDisplay();
       renderAll();
       const _initHash = location.hash.match(/^#participant=(\d+)$/);
-      if (_initHash) { const _rid = parseInt(_initHash[1]); if (participants.find(p=>p._row===_rid)) openDetail(_rid); }
+      if (_initHash) { const _p = participants.find(p=>String(p['row_id'])===_initHash[1]); if (_p) openDetail(_p._row); }
     } catch(e) {
       currentUser = null;
       localStorage.removeItem('dgr_user');
@@ -2128,7 +2128,7 @@ function openDetail(row) {
     </div>`;
   document.getElementById('detail-view').style.display='block';
   document.getElementById('detail-view').scrollTop=0;
-  history.pushState({}, '', '#participant=' + row);
+  history.pushState({}, '', '#participant=' + (p['row_id'] || row));
 }
 
 function openMyProfile() { if (currentUser&&!currentUser.isGuest) openDetail(currentUser.row); else openAuthModal('Войдите как участник'); }
