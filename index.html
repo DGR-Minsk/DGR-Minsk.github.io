@@ -367,6 +367,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
   <div class="detail-back">
     <button class="back-btn" onclick="closeDetail()" style="display:flex;align-items:center;gap:6px;font-size:14px;font-family:'Inter',sans-serif;font-weight:700;letter-spacing:.5px">← <span style="font-size:12px">К списку</span></button>
     <div class="detail-back-title" id="detail-title">Участник</div>
+    <button id="viewer-login-btn" onclick="closeDetail()" style="display:none;background:var(--gold);color:var(--black);border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;font-family:'Inter',sans-serif;flex-shrink:0">Войти →</button>
   </div>
   <div id="detail-body"></div>
 </div>
@@ -641,7 +642,19 @@ window.onload = async () => {
       showAuth();
     }
   } else {
-    showAuth();
+    const _viewHash = location.hash.match(/^#participant=(\d+)$/);
+    if (_viewHash) {
+      showLoad(true);
+      showAuth();
+      try {
+        await loadData();
+        const _vp = participants.find(p => String(p['row_id']) === _viewHash[1]);
+        if (_vp) openDetail(_vp._row);
+      } catch(e) {}
+      showLoad(false);
+    } else {
+      showAuth();
+    }
   }
 };
 
@@ -1625,6 +1638,10 @@ function openPhotographerCabinet() {
       <div style="font-size:17px;font-weight:700;color:var(--gold)">${currentUser.name}</div>
       ${currentUser.email ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">📧 ${currentUser.email}</div>` : ''}
       <div style="font-size:13px;color:var(--text);margin-top:8px">📷 Загружено: <strong>${myPhotos.length}${limitStr}</strong> фото</div>
+      <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:4px">
+        <a href="https://t.me/Egor_Shunko" target="_blank" style="color:var(--gold);font-size:11px;text-decoration:none;padding:4px 0">✉️ Связаться с разработчиком</a>
+        <button onclick="deletePhotographerAccount()" style="background:transparent;border:none;color:#e53935;font-size:11px;cursor:pointer;padding:4px 0;text-align:left;font-family:'Inter',sans-serif">🗑 Удалить аккаунт и все данные</button>
+      </div>
     </div>
     ${myPhotos.length ? `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото</span><button onclick="toggleSelectMode('photographer')" style="background:none;border:1px solid var(--border);color:${_selectMode==='photographer'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='photographer'?'✓ Выбор':'☐'}</button></div>
     <div class="personal-gallery${_selectMode==='photographer'?' in-select-mode':''}" data-select-mode="photographer" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
@@ -1982,7 +1999,7 @@ function renderGallery() {
     <button onclick="gallerySortBy='new';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='new'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='new'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='new'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">🕐 Новые</button>
     <button onclick="gallerySortBy='likes';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='likes'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='likes'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='likes'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">❤️ Лайки</button>
     <button onclick="gallerySortBy='comments';renderGallery()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid ${gallerySortBy==='comments'?'var(--gold)':'var(--border)'};background:${gallerySortBy==='comments'?'var(--gold-glow)':'var(--card)'};color:${gallerySortBy==='comments'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">💬 Коммент.</button>
-    ${currentUser&&!currentUser.isGuest?`<button onclick="toggleSelectMode('gallery')" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${_selectMode==='gallery'?'var(--gold)':'var(--border)'};background:${_selectMode==='gallery'?'var(--gold-glow)':'var(--card)'};color:${_selectMode==='gallery'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='gallery'?'✓':'☐'}</button>`:''}
+    ${currentUser?`<button onclick="toggleSelectMode('gallery')" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${_selectMode==='gallery'?'var(--gold)':'var(--border)'};background:${_selectMode==='gallery'?'var(--gold-glow)':'var(--card)'};color:${_selectMode==='gallery'?'var(--gold)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='gallery'?'✓':'☐'}</button>`:''}
   </div>`;
 
   el.innerHTML = uploadBtn + sortBar + `<div id="gallery-grid" class="${_selectMode==='gallery'?'in-select-mode':''}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${sorted.map((ph,i)=>`
@@ -2130,6 +2147,8 @@ function openDetail(row) {
     </div>`;
   document.getElementById('detail-view').style.display='block';
   document.getElementById('detail-view').scrollTop=0;
+  const _vlb = document.getElementById('viewer-login-btn');
+  if (_vlb) _vlb.style.display = currentUser ? 'none' : 'block';
   history.pushState({}, '', '#participant=' + (p['row_id'] || row));
 }
 
@@ -3367,8 +3386,21 @@ async function renderAdminGuests() {
   const el = document.getElementById('admin-section-u');
   el.innerHTML = '<div class="empty">Загрузка...</div>';
   const blocked = await getBlockedListCached();
+  // Объединяем: сервер (Согласия) + localStorage текущего устройства
+  let guests = [];
+  try {
+    const res = await api({action:'getGuests'});
+    if (res && res.guests) {
+      guests = res.guests.map(g => ({ email: g.email, name: g.name, role: g.role }));
+    }
+  } catch(e) {}
+  // Добавляем из localStorage если не дублируется
   const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
-  const guests = Object.entries(verified).map(([email, data]) => ({email, ...data}));
+  for (const [email, data] of Object.entries(verified)) {
+    if (!guests.find(g => g.email.toLowerCase() === email.toLowerCase())) {
+      guests.push({ email, ...data });
+    }
+  }
   if (!guests.length) { el.innerHTML='<div class="empty">Нет зарегистрированных гостей</div>'; return; }
   el.innerHTML = guests.map((g,i) => {
     const isBlocked = blocked.some(b=>b.key===g.email.toLowerCase());
