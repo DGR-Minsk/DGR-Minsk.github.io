@@ -798,11 +798,13 @@ function renderEvent() {
 
   el.innerHTML = `
     <div style="text-align:center;padding:24px 12px 18px;background:linear-gradient(180deg,var(--gold-glow),transparent);border:1px solid rgba(245,197,24,.15);border-radius:16px;margin-bottom:18px">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:var(--gold);letter-spacing:3px;line-height:1">DGR 2026</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:var(--gold);letter-spacing:3px;line-height:1">DGR 2026</div>
+        ${canEdit ? `<button onclick="openEditAboutText()" style="background:none;border:none;color:var(--gold);font-size:16px;cursor:pointer;opacity:.7;padding:2px;flex-shrink:0;margin-top:4px" title="Редактировать описание">✎</button>` : ''}
+      </div>
       <div style="font-size:11px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:6px">The Distinguished Gentleman's Ride · Минск</div>
-      <div style="position:relative;margin-top:14px;max-width:380px;margin-left:auto;margin-right:auto">
+      <div style="margin-top:14px;max-width:380px;margin-left:auto;margin-right:auto">
         <div style="font-size:13px;color:var(--text);line-height:1.5">${aboutText}</div>
-        ${canEdit ? `<button onclick="openEditAboutText()" style="position:absolute;top:-2px;right:-2px;background:none;border:none;color:var(--gold);font-size:14px;cursor:pointer;opacity:.7;padding:2px" title="Редактировать описание">✎</button>` : ''}
       </div>
     </div>
 
@@ -1033,11 +1035,11 @@ async function sendGuestCodeReturning() {
         verified[email.toLowerCase()].consentGiven = true;
         localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
         apiPost({action:'saveGuestConsent', email, name: prev.name, consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString()}).catch(()=>{});
-        loadData(true).then(showApp);
+        showLoad(true); loadData(true).then(() => { showLoad(false); showApp(); });
       };
       document.getElementById('consent-modal').classList.add('open');
     } else {
-      loadData(true).then(showApp);
+      showLoad(true); loadData(true).then(() => { showLoad(false); showApp(); });
     }
     return;
   }
@@ -1537,13 +1539,13 @@ async function loginAsApprovedPhotographer() {
   if (rec) {
     currentUser = { name: rec.name, email: rec.email, row: 0, isGuest: false, isPhotographer: true, data: null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    loadData(true).then(showApp);
+    showLoad(true); loadData(true).then(() => { showLoad(false); showApp(); });
   } else {
     apiPost({ action: 'photographerLogin', email }).then(d => {
       if (d && d.name) {
         currentUser = { name: d.name, email, row: 0, isGuest: false, isPhotographer: true, data: null };
         localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-        loadData(true).then(showApp);
+        showLoad(true); loadData(true).then(() => { showLoad(false); showApp(); });
       } else {
         errEl.textContent = 'Email не найден в списке одобренных';
         errEl.style.display = 'block';
@@ -1579,6 +1581,7 @@ function openGuestCabinet() {
 }
 
 function openPhotographerCabinet() {
+  if (_selectMode === 'gallery') { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
   const myPhotos = gallery.filter(ph => ph.owner_name === currentUser.name);
   const limit = currentUser.isPhotographer ? getPhotographerLimit() : (currentUser.data ? parseInt(currentUser.data['photo_limit']) || 0 : 0);
   const limitStr = limit > 0 ? ` / ${limit}` : '';
@@ -1592,9 +1595,9 @@ function openPhotographerCabinet() {
     ${myPhotos.length ? `<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><span>Мои фото</span><button onclick="toggleSelectMode('photographer')" style="background:none;border:1px solid var(--border);color:${_selectMode==='photographer'?'var(--gold)':'var(--muted)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif">${_selectMode==='photographer'?'✓ Выбор':'☐'}</button></div>
     <div class="personal-gallery${_selectMode==='photographer'?' in-select-mode':''}" data-select-mode="photographer" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
       ${myPhotos.sort((a,b)=>new Date(b.uploaded_at||0)-new Date(a.uploaded_at||0)).map(ph => `
-        <div class="personal-gallery-item${_selectMode==='photographer'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;background:var(--card);border-radius:10px;overflow:hidden;position:relative" onclick="if(_selectMode==='photographer'){handleGalleryClick(this,'photographer','${ph.photo_url}',null)}else{openLbSingle('${ph.photo_url}','${currentUser.name}','Моё фото')}" ontouchstart="startLongPress(this,'photographer','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" oncontextmenu="event.preventDefault();return false">
+        <div class="personal-gallery-item${_selectMode==='photographer'&&_selectedItems.has(ph.photo_url)?' selected':''}" style="aspect-ratio:1;background:var(--card);border-radius:10px;overflow:hidden;position:relative" onclick="if(_selectMode==='photographer'){handleGalleryClick(this,'photographer','${ph.photo_url}',null)}else{${ph.photo_url.startsWith('__FOLDER__')?`window.open('${ph.photo_url.slice(10)}','_blank')`:`openLbSingle('${ph.photo_url}','${currentUser.name}','Моё фото')`}}" ontouchstart="startLongPress(this,'photographer','${ph.photo_url}')" ontouchend="cancelLongPress(event)" ontouchmove="cancelLongPress(event)" oncontextmenu="event.preventDefault();return false">
           <div class="sel-circle${_selectMode==='photographer'&&_selectedItems.has(ph.photo_url)?' checked':''}"></div>
-          <img src="${px(ph.photo_url)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+          ${ph.photo_url.startsWith('__FOLDER__') ? `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><div style="font-size:36px">📁</div><div style="font-size:10px;color:var(--muted);text-align:center;padding:0 4px">Папка</div></div>` : `<img src="${px(ph.photo_url)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`}
           ${_selectMode!=='photographer'?`<button onclick="event.stopPropagation();deletePhotographerPhoto(${ph._row},'${ph.photo_url}')" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);border:1px solid #e53935;color:#e53935;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>`:''}
         </div>`).join('')}
     </div>` : '<div class="empty" style="margin-bottom:16px">Вы ещё не загружали фото</div>'}
@@ -1704,7 +1707,7 @@ function updateUserDisplay() {
           <span style="position:absolute;top:-3px;right:-3px;background:#e53935;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">👑</span>
         </div>
       </div>
-      <button onclick="openAdminPanel()" style="background:#e53935;border:none;border-radius:8px;padding:5px 8px;color:white;font-size:13px;cursor:pointer;flex-shrink:0" title="Панель администратора">👑</button>
+      <button onclick="lbBtnAction(this,openAdminPanel)" style="background:#e53935;border:none;border-radius:8px;padding:5px 8px;color:white;font-size:13px;cursor:pointer;flex-shrink:0" title="Панель администратора">👑</button>
     </div>`;
     if (notifBtn) notifBtn.style.display = 'flex';
     updateNotifBadge();
@@ -2731,6 +2734,8 @@ function toggleSelectMode(mode) {
       if(document.getElementById('detail-view')) document.getElementById('detail-view').scrollTop=detailScroll;
       applySelectModeClasses();
     });
+  } else {
+    requestAnimationFrame(applySelectModeClasses);
   }
 }
 
@@ -2890,23 +2895,30 @@ async function bulkDelete() {
   if (!_selectedItems.size) return;
   showConfirm(`Удалить ${_selectedItems.size} фото?`, async () => {
     showLoad(true);
-    for (const url of _selectedItems) {
+    const prevMode = _selectMode;
+    const urls = [..._selectedItems];
+    for (const url of urls) {
       let ph;
-      if (_selectMode === 'photographer') {
+      if (prevMode === 'photographer') {
         ph = gallery.find(g => g.photo_url === url && g.owner_name === currentUser.name);
       } else {
         ph = gallery.find(g => g.photo_url === url && String(g.owner_row_id) === String(currentUser.row));
       }
       if (ph) {
-        await deleteFromCloudinary(ph.photo_url);
-        await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+        try {
+          await deleteFromCloudinary(ph.photo_url);
+          await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+        } catch(e) { console.error('Delete error:', e); }
       }
     }
     _selectMode = null; _selectedItems.clear(); renderSelectBar();
     toast('Фото удалены');
     await loadData(true); renderAll();
-    if (currentRecord) openDetail(currentRecord._row);
-    if (currentUser && currentUser.isPhotographer) openPhotographerCabinet();
+    if (prevMode === 'photographer') {
+      openPhotographerCabinet();
+    } else if (currentRecord) {
+      openDetail(currentRecord._row);
+    }
     showLoad(false);
   }, 'Удалить фото');
 }
@@ -2946,6 +2958,7 @@ function initNavIcons() {
 function goAbout() { switchTab(4); }
 let _currentTab = 0;
 function switchTab(i) {
+  if (_selectMode) { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
   _currentTab = i;
   if (i===4) renderEvent();
   document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
