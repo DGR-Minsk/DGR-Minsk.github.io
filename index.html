@@ -3493,10 +3493,15 @@ async function adminToggleBlockUser(email, name, type) {
 }
 
 function adminDeleteGuest(email) {
-  showConfirm(`Удалить гостя ${email}? Он сможет снова зарегистрироваться.`, () => {
+  showConfirm(`Удалить гостя ${email}? Все его данные и согласия будут удалены.`, async () => {
+    showLoad(true);
+    // Чистим localStorage
     const verified = JSON.parse(localStorage.getItem('dgr_verified_emails')||'{}');
     delete verified[email.toLowerCase()];
     localStorage.setItem('dgr_verified_emails', JSON.stringify(verified));
+    // Удаляем на сервере: Согласия + Верификация + Реакции
+    await apiPost({action:'deleteGuestData', email}).catch(()=>{});
+    showLoad(false);
     toast('Гость удалён');
     renderAdminGuests();
   }, 'Удалить гостя');
