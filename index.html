@@ -210,6 +210,8 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 
 .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 18px; font-size: 13px; font-weight: 600; z-index: 600; max-width: 300px; text-align: center; display: none; pointer-events: none; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
 
@@ -2040,9 +2042,9 @@ function openDetail(row) {
           </div>
 
         </div>
+        ${(isMe||isAdmin()) && p['qr_link'] ? `<button onclick="openQR('${p['qr_link']}','${p['ФИО']||''}','${p['row_id']||p._row}')" style="background:transparent;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer;align-self:flex-start">QR 📲</button>` : ''}
         ${isMe ? `<div style="display:inline-flex;flex-direction:column;gap:4px;align-self:flex-start">
           <button onclick="logout()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer">↪ Выход</button>
-          ${p['qr_link']?`<button onclick="openQR('${p['qr_link']}')" style="background:transparent;border:1px solid var(--border);color:var(--gold);border-radius:8px;padding:6px 10px;font-family:'Inter',sans-serif;font-size:11px;font-weight:700;cursor:pointer">QR 📲</button>`:''}
           <div style="display:flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid var(--border);border-radius:8px">
             <span style="font-size:10px;color:var(--muted);line-height:1.3;max-width:80px">Показывать<br>имя публично<br><span style="font-size:8px;opacity:.6">иначе «Участник DGR»</span></span>
             <label style="position:relative;display:inline-block;width:30px;height:16px;flex-shrink:0;cursor:pointer">
@@ -2132,9 +2134,26 @@ function openDetail(row) {
 }
 
 function openMyProfile() { if (currentUser&&!currentUser.isGuest) openDetail(currentUser.row); else openAuthModal('Войдите как участник'); }
-function openQR(url) {
-  document.getElementById('qr-img').src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+async function openQR(url, name, rowId) {
+  const container = document.getElementById('qr-canvas-wrap');
+  container.innerHTML = '<div style="width:260px;height:260px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">Генерация…</div>';
+  document.getElementById('qr-modal-name').textContent = name || '';
   document.getElementById('qr-modal').classList.add('open');
+  const logoDataUrl = document.querySelector('link[rel="icon"]')?.href || '';
+  const label = rowId || '';
+  const blob = await _makeQRBlob(url, logoDataUrl, 260, label);
+  const imgUrl = URL.createObjectURL(blob);
+  container.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = imgUrl;
+  img.style.cssText = 'width:260px;display:block';
+  container.appendChild(img);
+  document.getElementById('qr-download-btn').onclick = () => {
+    const a = document.createElement('a');
+    a.href = imgUrl;
+    a.download = (label || 'qr') + '_' + (name||'participant').replace(/\s+/g,'-') + '.png';
+    a.click();
+  };
 }
 function closeDetail() { clearSelectionUI(); document.getElementById('detail-view').style.display='none'; history.pushState({}, '', window.location.pathname + window.location.search); renderAll(); }
 
@@ -3457,6 +3476,14 @@ function renderAdminSettings() {
     <div style="margin-top:12px;font-size:11px;color:var(--muted)">
       Сейчас: загрузка фото ${isPhotoUploadOpen()?'<span style="color:#4caf50">открыта</span>':'<span style="color:#e53935">закрыта</span>'} · голосование ${isVotingOpen()?'<span style="color:#4caf50">открыто</span>':'<span style="color:#e53935">закрыто</span>'}
     </div>
+    <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px">QR-коды участников</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Участников с qr_link: <strong>${participants.filter(p=>p['qr_link']).length}</strong>
+      </div>
+      <button onclick="bulkDownloadQR(this)" class="modal-btn" style="margin-bottom:8px">⬇ Скачать ZIP со всеми QR</button>
+      <button onclick="bulkPrintQR(this)" class="modal-btn ghost">🖨 Открыть для печати (PDF)</button>
+    </div>
   `;
   document.getElementById('admin-photo-limit').value = getPhotographerLimit();
 }
@@ -3479,6 +3506,118 @@ function resetAdminTimings() {
   saveTimingsToServer(DEFAULT_TIMINGS);
   toast('Тайминги сброшены');
   renderAdminSettings();
+}
+
+async function _makeQRBlob(data, logoDataUrl, size, label) {
+  const qr = new QRCodeStyling({
+    width: size, height: size,
+    data,
+    image: logoDataUrl,
+    dotsOptions: { color: '#000000', type: 'rounded' },
+    backgroundOptions: { color: '#ffffff' },
+    cornersSquareOptions: { color: '#000000', type: 'extra-rounded' },
+    cornersDotOptions: { color: '#F5C518', type: 'dot' },
+    imageOptions: { crossOrigin: 'anonymous', margin: Math.round(size * 0.02), imageSize: 0.32 },
+    qrOptions: { errorCorrectionLevel: 'H' }
+  });
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:-9999px;visibility:hidden';
+  document.body.appendChild(tmp);
+  qr.append(tmp);
+  await new Promise(r => setTimeout(r, 350));
+  const srcCanvas = tmp.querySelector('canvas');
+  document.body.removeChild(tmp);
+
+  const stripH = Math.round(size * 0.12);
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size + stripH;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size + stripH);
+  if (srcCanvas) ctx.drawImage(srcCanvas, 0, 0);
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(0, size, size, stripH);
+  ctx.fillStyle = '#F5C518';
+  ctx.font = `bold ${Math.round(stripH * 0.52)}px "Arial", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(label), size / 2, size + stripH / 2);
+
+  return new Promise(res => out.toBlob(res, 'image/png'));
+}
+
+async function bulkDownloadQR(btn) {
+  const withQR = participants.filter(p => p['qr_link']);
+  if (!withQR.length) { toast('Нет участников с qr_link'); return; }
+  btn.disabled = true;
+  const origText = btn.textContent;
+  const logoDataUrl = document.querySelector('link[rel="icon"]')?.href || '';
+  const zip = new JSZip();
+
+  for (let i = 0; i < withQR.length; i++) {
+    const p = withQR[i];
+    btn.textContent = `Генерация ${i+1}/${withQR.length}…`;
+    const label = p['row_id'] || p._row;
+    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 600, label);
+    const fname = label + '_' + (p['ФИО']||'participant').replace(/[\s/\\]/g,'-') + '.png';
+    zip.file(fname, blob);
+  }
+
+  btn.textContent = 'Упаковка ZIP…';
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  a.download = 'DGR_QR_codes.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  btn.textContent = '✓ Готово';
+  btn.disabled = false;
+  setTimeout(() => { btn.textContent = origText; }, 3000);
+}
+
+async function bulkPrintQR(btn) {
+  const withQR = participants.filter(p => p['qr_link']);
+  if (!withQR.length) { toast('Нет участников с qr_link'); return; }
+  btn.disabled = true;
+  const origText = btn.textContent;
+  const logoDataUrl = document.querySelector('link[rel="icon"]')?.href || '';
+  const dataUrls = [];
+
+  for (let i = 0; i < withQR.length; i++) {
+    btn.textContent = `Генерация ${i+1}/${withQR.length}…`;
+    const p = withQR[i];
+    const label = p['row_id'] || p._row;
+    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 400, label);
+    const url = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+    dataUrls.push({ url, name: p['ФИО']||'', id: label });
+  }
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QR-коды DGR 2026</title>
+  <style>
+    body { margin: 0; background: #fff; font-family: Arial, sans-serif; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+    .cell { display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 12px 8px; border: 0.5px solid #eee; page-break-inside: avoid; }
+    .cell img { width: 100%; max-width: 180px; height: auto; display: block; }
+    .cell .nm { font-size: 10px; font-weight: 700; text-align: center; margin-top: 6px; color: #111; }
+    .cell .id { font-size: 8px; color: #999; margin-top: 2px; }
+    @media print {
+      @page { size: A4; margin: 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style></head><body>
+  <div class="grid">
+  ${dataUrls.map(d=>`<div class="cell"><img src="${d.url}"><div class="nm">${d.name}</div><div class="id">#${d.id}</div></div>`).join('')}
+  </div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`);
+  win.document.close();
+
+  btn.textContent = origText;
+  btn.disabled = false;
 }
 function saveAdminPhotoLimit() {
   const val = parseInt(document.getElementById('admin-photo-limit').value) || DEFAULT_PHOTOGRAPHER_LIMIT;
@@ -4558,9 +4697,11 @@ function declineConsent() {
 <!-- QR MODAL -->
 <div class="modal-overlay" id="qr-modal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-sheet" style="align-items:center">
-    <div class="modal-title">Мой QR-код</div>
-    <div class="modal-sub">Отсканируйте для открытия профиля</div>
-    <img id="qr-img" src="" style="width:220px;height:220px;border-radius:12px;border:3px solid var(--gold);margin:12px 0">
+    <div class="modal-title">QR-код участника</div>
+    <div id="qr-modal-name" style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px"></div>
+    <div class="modal-sub" style="margin-bottom:8px">Отсканируйте для открытия профиля</div>
+    <div id="qr-canvas-wrap" style="border-radius:12px;overflow:hidden;border:3px solid var(--gold);margin:4px 0 12px"></div>
+    <button id="qr-download-btn" class="modal-btn" style="margin-bottom:8px">⬇ Скачать PNG</button>
     <button class="modal-btn ghost" onclick="document.getElementById('qr-modal').classList.remove('open')">Закрыть</button>
   </div>
 </div>
