@@ -1973,6 +1973,7 @@ function renderGallery() {
 // DETAIL
 function openDetail(row) {
   const p = participants.find(x=>x._row==row); if (!p) return;
+  if (_selectMode === 'gallery') { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
   currentRecord=p;
 
   const isMe = currentUser&&!currentUser.isGuest&&currentUser.row==row;
@@ -2734,6 +2735,9 @@ function toggleSelectMode(mode) {
       if(document.getElementById('detail-view')) document.getElementById('detail-view').scrollTop=detailScroll;
       applySelectModeClasses();
     });
+  } else if (document.getElementById('photographer-cabinet')?.style.display !== 'none') {
+    openPhotographerCabinet();
+    requestAnimationFrame(applySelectModeClasses);
   } else {
     requestAnimationFrame(applySelectModeClasses);
   }
@@ -2897,6 +2901,9 @@ async function bulkDelete() {
     showLoad(true);
     const prevMode = _selectMode;
     const urls = [..._selectedItems];
+    // Собрать фото и отсортировать по _row убывающе — deleteRow сдвигает строки вверх,
+    // поэтому удалять нужно с наибольшего номера строки, чтобы индексы не смещались
+    const photosToDelete = [];
     for (const url of urls) {
       let ph;
       if (prevMode === 'photographer') {
@@ -2904,12 +2911,14 @@ async function bulkDelete() {
       } else {
         ph = gallery.find(g => g.photo_url === url && String(g.owner_row_id) === String(currentUser.row));
       }
-      if (ph) {
-        try {
-          await deleteFromCloudinary(ph.photo_url);
-          await apiPost({action:'deleteGalleryPhoto', row:ph._row});
-        } catch(e) { console.error('Delete error:', e); }
-      }
+      if (ph) photosToDelete.push(ph);
+    }
+    photosToDelete.sort((a, b) => b._row - a._row);
+    for (const ph of photosToDelete) {
+      try {
+        await deleteFromCloudinary(ph.photo_url);
+        await apiPost({action:'deleteGalleryPhoto', row:ph._row});
+      } catch(e) { console.error('Delete error:', e); }
     }
     _selectMode = null; _selectedItems.clear(); renderSelectBar();
     toast('Фото удалены');
@@ -4549,7 +4558,7 @@ function declineConsent() {
 
 <div id="photographer-cabinet" style="display:none;position:fixed;inset:0;background:var(--black);z-index:300;overflow-y:auto;max-width:480px;margin:0 auto;padding-bottom:40px">
   <div style="position:sticky;top:0;background:rgba(8,8,8,.97);padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;z-index:10">
-    <button onclick="document.getElementById('photographer-cabinet').style.display='none'" style="background:none;border:none;color:var(--gold);font-size:24px;cursor:pointer;line-height:1">←</button>
+    <button onclick="if(_selectMode==='photographer'){_selectMode=null;_selectedItems.clear();renderSelectBar();}document.getElementById('photographer-cabinet').style.display='none'" style="background:none;border:none;color:var(--gold);font-size:24px;cursor:pointer;line-height:1">←</button>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--gold)">📷 МОЙ КАБИНЕТ</div>
   </div>
   <div style="padding:14px">
