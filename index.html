@@ -1945,8 +1945,8 @@ async function doVote(targetRow, type, btn) {
   if (!currentUser||currentUser.isGuest||currentUser.isPhotographer) { toast('Голосовать могут только участники заезда'); return; }
   if (!currentUser.row || currentUser.row < 2) { toast('Голосовать могут только участники заезда'); return; }
   if (currentUser.row==targetRow) { toast('За себя голосовать нельзя'); return; }
-  // Проверка таймингов голосования (админ не ограничен)
-  if (!isAdmin() && !isVotingOpen()) {
+  // Проверка таймингов голосования
+  if (!isVotingOpen()) {
     const t = getTimings();
     if (t.vote_start && Date.now() < new Date(t.vote_start).getTime()) {
       toast('Голосование откроется ' + formatTimingDate(t.vote_start));
@@ -2205,19 +2205,19 @@ function startUpload(type, fromTab) {
   if (!currentUser) { openAuthModal('Войдите чтобы загружать фото'); return; }
   if (currentUser.isGuest) { openAuthModal('Войдите как участник или фотограф чтобы загружать фото'); return; }
   if (currentUser.isPhotographer && type !== 'gallery_general') { toast('Фотографы могут загружать только в общую галерею'); return; }
-  // Проверка таймингов загрузки (админ не ограничен)
-  if (!isAdmin()) {
+  // Проверка таймингов: portrait и live_photo — без ограничений; галерея и конкурс — по таймингам (включая админа)
+  if (type === 'contest_bike' || type === 'contest_style' || type === 'gallery_general') {
     const t = getTimings();
     const now = Date.now();
-    const typeNames = {contest_bike:'ТОП Байк', contest_style:'ТОП Стиль', live_photo:'живое фото', portrait:'фото профиля', gallery_general:'фото в галерею'};
-    const typeName = typeNames[type] || 'фото';
+    const typeNames = {contest_bike:'ТОП Байк', contest_style:'ТОП Стиль', gallery_general:'фото в галерею'};
+    const typeName = typeNames[type];
     let open = true, startKey = null;
     if (type === 'contest_bike') {
       open = isContestBikeOpen();
-      startKey = (t.contest_bike_start && !t.contest_bike_end) || t.contest_bike_start ? 'contest_bike_start' : 'photo_start';
+      startKey = t.contest_bike_start ? 'contest_bike_start' : 'photo_start';
     } else if (type === 'contest_style') {
       open = isContestStyleOpen();
-      startKey = (t.contest_style_start && !t.contest_style_end) || t.contest_style_start ? 'contest_style_start' : 'photo_start';
+      startKey = t.contest_style_start ? 'contest_style_start' : 'photo_start';
     } else {
       open = isPhotoUploadOpen();
       startKey = 'photo_start';
@@ -3668,22 +3668,11 @@ async function _makeQRBlob(data, logoDataUrl, size, label) {
   ctx.fillStyle = '#111111';
   ctx.fillRect(0, 0, size, stripH);
 
-  // Диаметр кружка = половина высоты полосы, радиус = четверть
-  const holeDiam = Math.round(stripH * 0.5);
-  const holeR    = holeDiam / 2;
-  // Центр кружка: правая часть, вертикально по центру полосы
-  const holeX = size - holeR - Math.round(stripH * 0.2);
   const holeY = stripH / 2;
 
-  // Текст ID — слева от кружка, с отступом
-  const textAreaW = holeX - holeR - Math.round(stripH * 0.15);
-  ctx.fillStyle = '#F5C518';
-  ctx.font = `bold ${Math.round(stripH * 0.40)}px "Arial", sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(String(label), Math.round(stripH * 0.15), holeY, textAreaW);
-
-  // Кружок-метка для дырокола (контур золотой + белое заполнение)
+  // Кружок-метка для дырокола (справа)
+  const holeR = Math.round(stripH * 0.25); // радиус = 1/4 высоты полосы (диаметр = 1/2)
+  const holeX = size - holeR - Math.round(stripH * 0.18);
   ctx.beginPath();
   ctx.arc(holeX, holeY, holeR, 0, Math.PI * 2);
   ctx.fillStyle = '#ffffff';
@@ -3691,15 +3680,29 @@ async function _makeQRBlob(data, logoDataUrl, size, label) {
   ctx.strokeStyle = '#F5C518';
   ctx.lineWidth = Math.max(2, Math.round(holeR * 0.18));
   ctx.stroke();
-
-  // Крестик внутри кружка — ориентир центра
-  ctx.strokeStyle = '#F5C518';
-  ctx.lineWidth = Math.max(1, Math.round(holeR * 0.12));
+  // Крестик внутри кружка — ориентир для дырокола
   const tick = Math.round(holeR * 0.35);
   ctx.beginPath();
   ctx.moveTo(holeX - tick, holeY); ctx.lineTo(holeX + tick, holeY);
   ctx.moveTo(holeX, holeY - tick); ctx.lineTo(holeX, holeY + tick);
   ctx.stroke();
+
+  // Надпись DGR — по центру полосы (Bebas Neue как на странице входа)
+  const dgrSize = Math.round(stripH * 0.62);
+  ctx.fillStyle = '#F5C518';
+  ctx.font = `${dgrSize}px "Bebas Neue", "Arial Narrow", Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('DGR', size / 2, holeY);
+
+  // ID номер — слева, под DGR немного меньше
+  const idPadL = Math.round(stripH * 0.12);
+  const idMaxW = size / 2 - idPadL - Math.round(stripH * 0.1); // до центра
+  ctx.fillStyle = '#F5C518';
+  ctx.font = `bold ${Math.round(stripH * 0.36)}px "Arial", sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(label), idPadL, holeY, idMaxW);
 
   // QR сдвинут вниз на высоту полосы
   if (srcCanvas) ctx.drawImage(srcCanvas, 0, stripH);
@@ -3719,7 +3722,7 @@ async function bulkDownloadQR(btn) {
     const p = withQR[i];
     btn.textContent = `Генерация ${i+1}/${withQR.length}…`;
     const label = p['row_id'] || p._row;
-    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 600, label);
+    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 590, label);
     const fname = label + '_' + (p['ФИО']||'participant').replace(/[\s/\\]/g,'-') + '.png';
     zip.file(fname, blob);
   }
@@ -3749,7 +3752,7 @@ async function bulkPrintQR(btn) {
     btn.textContent = `Генерация ${i+1}/${withQR.length}…`;
     const p = withQR[i];
     const label = p['row_id'] || p._row;
-    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 400, label);
+    const blob = await _makeQRBlob(p['qr_link'], logoDataUrl, 590, label);
     const url = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
     dataUrls.push({ url, name: p['ФИО']||'', id: label });
   }
@@ -3758,19 +3761,18 @@ async function bulkPrintQR(btn) {
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QR-коды DGR 2026</title>
   <style>
     body { margin: 0; background: #fff; font-family: Arial, sans-serif; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
-    .cell { display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 12px 8px; border: 0.5px solid #eee; page-break-inside: avoid; }
-    .cell img { width: 100%; max-width: 180px; height: auto; display: block; }
-    .cell .nm { font-size: 10px; font-weight: 700; text-align: center; margin-top: 6px; color: #111; }
-    .cell .id { font-size: 8px; color: #999; margin-top: 2px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, 66mm); gap: 6mm; padding: 8mm; justify-content: center; }
+    .cell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            page-break-inside: avoid; }
+    .cell img { width: 50mm; height: auto; display: block; }
+    .cell .nm { font-size: 7pt; font-weight: 700; text-align: center; margin-top: 2mm; color: #111; max-width: 60mm; }
     @media print {
-      @page { size: A4; margin: 10mm; }
+      @page { size: A4; margin: 8mm; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style></head><body>
   <div class="grid">
-  ${dataUrls.map(d=>`<div class="cell"><img src="${d.url}"><div class="nm">${d.name}</div><div class="id">#${d.id}</div></div>`).join('')}
+  ${dataUrls.map(d=>`<div class="cell"><img src="${d.url}"><div class="nm">${d.name}</div></div>`).join('')}
   </div>
   <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
   </body></html>`);
