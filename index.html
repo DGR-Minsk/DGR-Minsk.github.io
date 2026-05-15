@@ -1795,7 +1795,16 @@ function updateUserDisplay() {
 }
 
 // HELPERS
-function px(url) { return url ? `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=600&output=webp` : ''; }
+function px(url, w) {
+  if (!url) return '';
+  if (url.includes('res.cloudinary.com')) {
+    // Нативные Cloudinary-трансформации: автоформат (WebP/AVIF) + автокачество + ограничение ширины
+    const t = `f_auto,q_auto:good${w ? ',w_' + w : ',w_800'}`;
+    return url.replace('/upload/', '/upload/' + t + '/');
+  }
+  // Внешние URL (заводские фото и т.п.) — через wsrv.nl
+  return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&w=${w||600}&output=webp`;
+}
 function gp(p) { return p['ЗАВОДСКОЕ ФОТО']||p['Factory_Photo']||p['factory_photo']||''; }
 function gl(p) { return p['ЖИВОЕ ФОТО БАЙКА']||p['live_photo']||''; }
 function gm(p) { return gl(p)||gp(p); }
@@ -2666,7 +2675,7 @@ function openLbSingleFull(url,name,sub,context,ownerRow) {
 function showLb() {
   const item=lbImages[lbIndex]; if (!item) return;
   lbCurrentPhoto=item;
-  document.getElementById('lb-img').src=px(item.url);
+  document.getElementById('lb-img').src=px(item.url, 1600);
   document.getElementById('lb-name').textContent=item.name||'';
   document.getElementById('lb-sub').textContent=item.sub||'';
   document.getElementById('lb-delete-confirm').style.display='none';
