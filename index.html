@@ -2099,7 +2099,7 @@ function openDetail(row) {
 }
 
 function openMyProfile() { if (currentUser&&!currentUser.isGuest) openDetail(currentUser.row); else openAuthModal('Войдите как участник'); }
-function closeDetail() { document.getElementById('detail-view').style.display='none'; renderAll(); }
+function closeDetail() { clearSelectionUI(); document.getElementById('detail-view').style.display='none'; renderAll(); }
 
 // UPLOAD
 function startUpload(type, fromTab) {
