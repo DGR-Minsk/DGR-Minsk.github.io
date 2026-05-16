@@ -338,13 +338,24 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
         <button class="modal-btn" style="background:var(--gold);color:var(--black)" onclick="lbBtnAction(this,submitPhotographerRequest)">ОТПРАВИТЬ ЗАЯВКУ</button>
         <button class="modal-btn ghost" style="font-size:11px;padding:9px;margin-top:4px" onclick="showPhotoChoice()">← Назад</button>
       </div>
-      <!-- Approved login form -->
+      <!-- Approved login form — step 1: email -->
       <div id="auth-photo-login" style="display:none">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Введите email, который был одобрен администратором</p>
-        <input class="field" id="photo-login-email" placeholder="Email фотографа" type="email">
-        <div class="modal-err" id="photo-login-err">Email не найден в списке одобренных</div>
-        <button class="modal-btn" style="background:var(--gold);color:var(--black)" onclick="lbBtnAction(this,loginAsApprovedPhotographer)">ВОЙТИ</button>
-        <button class="modal-btn ghost" style="font-size:11px;padding:9px;margin-top:4px" onclick="showPhotoChoice()">← Назад</button>
+        <div id="photo-step-email">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Введите имя и email одобренного фотографа — пришлём код подтверждения</p>
+          <input class="field" id="photographer-name" placeholder="Ваше имя" type="text">
+          <input class="field" id="photographer-email" placeholder="Email фотографа" type="email" inputmode="email">
+          <div class="modal-err" id="photographer-err">Заполните имя и email</div>
+          <button class="modal-btn" style="background:var(--gold);color:var(--black)" onclick="lbBtnAction(this,sendPhotographerCode)">ПОЛУЧИТЬ КОД</button>
+          <button class="modal-btn ghost" style="font-size:11px;padding:9px;margin-top:4px" onclick="showPhotoChoice()">← Назад</button>
+        </div>
+        <!-- step 2: code -->
+        <div id="photo-step-code" style="display:none">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:6px;text-align:center">Код отправлен на <span id="photo-email-display" style="color:var(--gold)"></span></p>
+          <input class="field" id="photo-code" placeholder="6-значный код" type="text" inputmode="numeric" maxlength="6" style="letter-spacing:6px;font-size:22px;text-align:center">
+          <div class="modal-err" id="photo-code-err">Неверный код</div>
+          <button class="modal-btn" style="background:var(--gold);color:var(--black)" onclick="lbBtnAction(this,verifyPhotographerCode)">ВОЙТИ КАК ФОТОГРАФ</button>
+          <button class="modal-btn ghost" style="font-size:11px;padding:9px;margin-top:4px" onclick="document.getElementById('photo-step-code').style.display='none';document.getElementById('photo-step-email').style.display='block'">← Изменить email</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1206,6 +1217,21 @@ async function sendPhotographerCode() {
     errEl.textContent = 'Этот email уже зарегистрирован как гость';
     errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ПОЛУЧИТЬ КОД';} return;
   }
+  // Проверить одобрен ли фотограф (localStorage + бэкенд)
+  const approvedLocal = JSON.parse(localStorage.getItem('dgr_approved_photographers')||'[]');
+  const isApprovedLocally = approvedLocal.some(p => p.email && p.email.toLowerCase() === email.toLowerCase());
+  if (!isApprovedLocally) {
+    try {
+      const approvalCheck = await api({ action: 'checkPhotographerApproved', email });
+      if (!approvalCheck || !approvalCheck.approved) {
+        errEl.textContent = 'Этот email не найден в списке одобренных фотографов';
+        errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ПОЛУЧИТЬ КОД';} return;
+      }
+    } catch(e) {
+      errEl.textContent = 'Ошибка проверки одобрения. Попробуйте ещё раз.';
+      errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ПОЛУЧИТЬ КОД';} return;
+    }
+  }
   try {
     const res = await apiPost({action:'sendVerificationCode', email});
     if (res && res.error) { errEl.textContent=res.error; errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ПОЛУЧИТЬ КОД';} return; }
@@ -1482,7 +1508,14 @@ function showPhotoRegister() {
 function showPhotoLogin() {
   document.getElementById('auth-photo-choice').style.display = 'none';
   document.getElementById('auth-photo-login').style.display = 'block';
-  document.getElementById('photo-login-err').style.display = 'none';
+  // Сбросить форму на шаг 1
+  document.getElementById('photo-step-email').style.display = 'block';
+  document.getElementById('photo-step-code').style.display = 'none';
+  document.getElementById('photographer-name').value = '';
+  document.getElementById('photographer-email').value = '';
+  document.getElementById('photographer-err').style.display = 'none';
+  document.getElementById('photo-code').value = '';
+  document.getElementById('photo-code-err').style.display = 'none';
 }
 async function submitPhotographerRequest() {
   const name = document.getElementById('photo-reg-name').value.trim();
