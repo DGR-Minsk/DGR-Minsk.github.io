@@ -335,21 +335,6 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
         <input class="field" id="photo-reg-name" placeholder="Имя / псевдоним" type="text">
         <input class="field" id="photo-reg-email" placeholder="Email для уведомления" type="email">
         <textarea class="field" id="photo-reg-motive" placeholder="Кто вы и почему хотите снимать для DGR?" style="height:80px;resize:none;font-family:'Inter',sans-serif;font-size:13px"></textarea>
-        <div style="margin:10px 0 4px">
-          <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;cursor:pointer">
-            <input type="checkbox" id="photo-consent-pd" style="margin-top:2px;width:18px;height:18px;accent-color:var(--gold);flex-shrink:0">
-            <span style="font-size:11px;color:var(--text)">Я ознакомлен с <b>Политикой конфиденциальности</b> и даю согласие на обработку персональных данных</span>
-          </label>
-          <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;cursor:pointer">
-            <input type="checkbox" id="photo-consent-terms" style="margin-top:2px;width:18px;height:18px;accent-color:var(--gold);flex-shrink:0">
-            <span style="font-size:11px;color:var(--text)">Я принимаю <b>Пользовательское соглашение</b> и понимаю, что ресурс является неофициальным</span>
-          </label>
-          <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;cursor:pointer">
-            <input type="checkbox" id="photo-consent-age" style="margin-top:2px;width:18px;height:18px;accent-color:var(--gold);flex-shrink:0">
-            <span style="font-size:11px;color:var(--text)">Я подтверждаю, что мне исполнилось <b>16 лет</b> и являюсь участником или гостем DGR 2026 Минск</span>
-          </label>
-          <div id="photo-consent-err" style="color:#e53935;font-size:11px;display:none;margin-bottom:4px">Необходимо принять все условия</div>
-        </div>
         <button class="modal-btn" style="background:var(--gold);color:var(--black)" onclick="lbBtnAction(this,submitPhotographerRequest)">ОТПРАВИТЬ ЗАЯВКУ</button>
         <button class="modal-btn ghost" style="font-size:11px;padding:9px;margin-top:4px" onclick="showPhotoChoice()">← Назад</button>
       </div>
@@ -1501,16 +1486,6 @@ async function submitPhotographerRequest() {
   const email = document.getElementById('photo-reg-email').value.trim();
   const motivation = document.getElementById('photo-reg-motive').value.trim();
   if (!name || !email || !motivation) { toast('Заполните все поля'); return; }
-  const consentPd    = document.getElementById('photo-consent-pd')?.checked;
-  const consentTerms = document.getElementById('photo-consent-terms')?.checked;
-  const consentAge   = document.getElementById('photo-consent-age')?.checked;
-  const consentErrEl = document.getElementById('photo-consent-err');
-  if (!consentPd || !consentTerms || !consentAge) {
-    if (consentErrEl) consentErrEl.style.display = 'block';
-    return;
-  }
-  if (consentErrEl) consentErrEl.style.display = 'none';
-  const consentDate = new Date().toISOString();
   const requests = JSON.parse(localStorage.getItem('dgr_photographer_requests') || '[]');
   if (requests.find(r => r.email === email)) { toast('Заявка от этого email уже подана'); return; }
   // Также проверить среди гостей в localStorage
@@ -1536,7 +1511,7 @@ async function submitPhotographerRequest() {
   if(emailBlocked) return;
   requests.push({ name, email, motivation, date: new Date().toISOString() });
   localStorage.setItem('dgr_photographer_requests', JSON.stringify(requests));
-  apiPost({ action: 'registerPhotographer', name, email, motivation, consent_pd: true, consent_terms: true, consent_age: true, consent_date: consentDate }).catch(() => {});
+  apiPost({ action: 'registerPhotographer', name, email, motivation }).catch(() => {});
   document.getElementById('auth-photo-register').innerHTML = `
     <div style="text-align:center;padding:20px 0">
       <div style="font-size:32px;margin-bottom:12px">✅</div>
@@ -3005,6 +2980,8 @@ function initNavIcons() {
 function goAbout() { switchTab(4); }
 let _currentTab = 0;
 function switchTab(i) {
+  const _dv = document.getElementById('detail-view');
+  if (_dv && _dv.style.display !== 'none') _dv.style.display = 'none';
   if (_selectMode) { _selectMode = null; _selectedItems.clear(); renderSelectBar(); }
   _currentTab = i;
   if (i===4) renderEvent();
@@ -4357,7 +4334,7 @@ function declineConsent() {
   currentUser = null;
   document.getElementById('consent-modal').classList.remove('open');
   // Показать заглушку
-  document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#000;color:#888;font-family:Inter,sans-serif;text-align:center;padding:24px"><div style="font-size:32px;margin-bottom:16px">🏍</div><div style="font-size:16px;color:#F5C518;font-weight:700;margin-bottom:8px">DGR 2026 Минск</div><div style="font-size:13px;line-height:1.6">Для использования приложения необходимо принять условия.<br><br><a href="javascript:location.reload()" style="color:#F5C518">Попробовать снова</a></div></div>';
+  document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#000;color:#888;font-family:Inter,sans-serif;text-align:center;padding:24px"><img src="${BIKE_URI}" style="width:80px;height:auto;opacity:.6;margin-bottom:16px"><div style="font-size:16px;color:#F5C518;font-weight:700;margin-bottom:8px">DGR 2026 Минск</div><div style="font-size:13px;line-height:1.6">Для использования приложения необходимо принять условия.<br><br><a href="javascript:location.reload()" style="color:#F5C518">Попробовать снова</a></div></div>`;
 }
 
 </script>
