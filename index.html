@@ -1235,16 +1235,19 @@ async function verifyPhotographerCode() {
     const isApproved = approved.find(p=>p.email&&p.email.toLowerCase()===email.toLowerCase());
     currentUser = { name: name||email.split('@')[0], email, row:0, isGuest:false, isPhotographer:true, isApprovedPhotographer:!!isApproved, data:null };
     localStorage.setItem('dgr_user', JSON.stringify(currentUser));
-    // Показать consent если ещё не давал
-    if (!_consentGiven) {
+    // Проверить согласие в таблице на бэкенде
+    let hasConsent = false;
+    try {
+      const consentCheck = await api({ action: 'getConsent', email });
+      hasConsent = !!(consentCheck && consentCheck.hasConsent);
+    } catch(e) {}
+    if (!hasConsent) {
       _afterConsentFn = () => {
-        apiPost({action:'saveGuestConsent', email: email, name: name||email.split('@')[0], consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString(), role:'photographer'}).catch(()=>{});
+        apiPost({action:'saveGuestConsent', email, name: name||email.split('@')[0], consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString(), role:'photographer'}).catch(()=>{});
         loadData(true).then(showApp);
       };
       document.getElementById('consent-modal').classList.add('open');
     } else {
-      _consentGiven = false;
-      apiPost({action:'saveGuestConsent', email: email, name: name||email.split('@')[0], consent_pd:'TRUE', consent_terms:'TRUE', consent_age:'TRUE', consent_date: new Date().toISOString(), role:'photographer'}).catch(()=>{});
       loadData(true).then(showApp);
     }
   } catch(e) { errEl.textContent='Ошибка. Попробуйте ещё раз.'; errEl.style.display='block'; if(btn){btn.disabled=false;btn.innerHTML='ВОЙТИ КАК ФОТОГРАФ';} }
