@@ -3879,14 +3879,20 @@ function renderCommentsPanel() {
     // Find participant to get portrait
     const commenter = participants.find(p => String(p._row) === String(c.user_row));
     const portrait = commenter ? gpt(commenter) : '';
-    const avatarContent = portrait 
+    const avatarContent = portrait
       ? `<img src="${px(portrait)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
       : initials;
     const clickable = commenter ? `onclick="document.getElementById('comments-panel').style.display='none';openDetail(${commenter._row})" style="cursor:pointer"` : '';
+    // Determine role label
+    let roleLabel = '', roleColor = 'var(--muted)';
+    if (c.user_role === 'photographer') { roleLabel = 'Фотограф'; roleColor = '#7eb8f7'; }
+    else if (c.user_role === 'guest') { roleLabel = 'Гость'; roleColor = 'var(--muted)'; }
+    else if (c.user_role === 'participant' || commenter) { roleLabel = 'Участник'; roleColor = 'var(--gold)'; }
+    const roleBadge = roleLabel ? ` <span style="font-size:9px;font-weight:400;color:${roleColor};opacity:.8">${roleLabel}</span>` : '';
     return `<div class="comment-item">
       <div class="comment-avatar" ${clickable}>${avatarContent}</div>
       <div class="comment-body">
-        <div class="comment-name" ${clickable}>${c.user_name||'Гость'}</div>
+        <div class="comment-name" ${clickable}>${c.user_name||'Гость'}${roleBadge}</div>
         <div class="comment-text">${c.text||''}</div>
         <div class="comment-time">${time}</div>
       </div>
@@ -3901,8 +3907,9 @@ async function sendComment() {
   const text = inp.value.trim();
   if (!text) return;
   inp.value = '';
-  await apiPost({action:'addReaction', photo_url:commentsPhotoUrl, photo_owner_row:commentsOwnerRow, user_name:currentUser.name, user_row:currentUser.row, type:'comment', text});
-  reactions.push({photo_url:commentsPhotoUrl, photo_owner_row:commentsOwnerRow, user_name:currentUser.name, user_row:currentUser.row, type:'comment', text, created_at:new Date().toISOString()});
+  const user_role = currentUser.isPhotographer ? 'photographer' : (currentUser.isGuest ? 'guest' : 'participant');
+  await apiPost({action:'addReaction', photo_url:commentsPhotoUrl, photo_owner_row:commentsOwnerRow, user_name:currentUser.name, user_row:currentUser.row, type:'comment', text, user_role});
+  reactions.push({photo_url:commentsPhotoUrl, photo_owner_row:commentsOwnerRow, user_name:currentUser.name, user_row:currentUser.row, type:'comment', text, user_role, created_at:new Date().toISOString()});
   renderCommentsPanel();
 }
 
