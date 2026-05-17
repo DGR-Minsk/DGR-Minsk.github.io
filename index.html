@@ -3124,9 +3124,22 @@ function startLongPress(el, mode, key) {
     _longPressTimer = null;
     if (navigator.vibrate) navigator.vibrate(40);
     if (!_selectMode) {
-      // Добавляем ключ ДО рендера — toggleSelectMode увидит его в _selectedItems
-      _selectedItems.add(key);
+      // Сначала включаем режим (он очищает _selectedItems), потом добавляем выбранный элемент
       toggleSelectMode(mode);
+      _selectedItems.add(key);
+      renderSelectBar();
+      // Визуально отметить элемент после ре-рендера
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.gallery-item, .personal-gallery-item').forEach(item => {
+          const os = item.getAttribute('ontouchstart') || '';
+          const m = os.match(/startLongPress\(this,'[^']+','([^']+)'\)/);
+          if (m && m[1] === key) {
+            item.classList.add('selected');
+            const c = item.querySelector('.sel-circle');
+            if (c) { c.classList.add('checked'); c.style.display = 'flex'; }
+          }
+        });
+      });
     } else {
       toggleSelectItem(key);
       const isSelected = _selectedItems.has(key);
@@ -3188,7 +3201,7 @@ function renderSelectBar() {
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'select-action-bar';
-    bar.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;max-width:480px;margin:0 auto;background:rgba(10,10,10,.97);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;z-index:200';
+    bar.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;max-width:480px;margin:0 auto;background:rgba(10,10,10,.97);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;z-index:320';
     document.body.appendChild(bar);
   }
   if (!_selectMode) { bar.style.display='none'; return; }
