@@ -474,6 +474,9 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="ptr-indicator" style="position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-60px);z-index:300;pointer-events:none;transition:transform .2s,opacity .2s;opacity:0">
+  <div id="ptr-inner" style="margin-top:10px;width:38px;height:38px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.5);font-size:20px;color:#000">↻</div>
+</div>
 <div class="upload-progress" id="upload-progress"><div class="spinner" style="width:36px;height:36px;border-width:3px"></div><div class="upload-progress-bar"><div class="upload-progress-fill" id="upload-fill"></div></div><div class="upload-progress-text" id="upload-text">Загрузка фото...</div></div>
 <input type="file" id="file-input" accept="image/*" multiple onchange="handleFiles(event)" style="position:absolute;left:-9999px;top:0;width:0;height:0;opacity:0;overflow:hidden">
 
@@ -820,6 +823,76 @@ async function loadData(force=false) {
   _afterLoad();
 }
 
+// ─── Pull-to-refresh ────────────────────────────────────────────────────────
+let _ptrStartY = 0, _ptrDy = 0, _ptrTriggered = false, _ptrRefreshing = false;
+const _PTR_THRESHOLD = 72;
+
+function _ptrSetPos(dy) {
+  const el = document.getElementById('ptr-indicator');
+  if (!el) return;
+  const clamped = Math.min(dy, _PTR_THRESHOLD * 1.4);
+  const progress = Math.min(clamped / _PTR_THRESHOLD, 1);
+  el.style.transform = `translateX(-50%) translateY(${Math.round(clamped * 0.55 - 60)}px)`;
+  el.style.opacity = progress;
+  document.getElementById('ptr-inner').style.transform = `rotate(${progress * 180}deg)`;
+}
+
+function _ptrReset() {
+  const el = document.getElementById('ptr-indicator');
+  if (!el) return;
+  el.style.transition = 'transform .25s,opacity .25s';
+  el.style.transform = 'translateX(-50%) translateY(-60px)';
+  el.style.opacity = '0';
+}
+
+async function _ptrDoRefresh() {
+  if (_ptrRefreshing) return;
+  _ptrRefreshing = true;
+  const inner = document.getElementById('ptr-inner');
+  if (inner) inner.style.animation = 'spin .6s linear infinite';
+  const el = document.getElementById('ptr-indicator');
+  if (el) { el.style.transition = 'transform .2s'; el.style.transform = 'translateX(-50%) translateY(-10px)'; el.style.opacity = '1'; }
+  try { await loadData(true); renderAll(); } catch(e) {}
+  _ptrRefreshing = false;
+  if (inner) inner.style.animation = '';
+  _ptrReset();
+}
+
+function _initPullToRefresh() {
+  document.addEventListener('touchstart', e => {
+    // Не срабатывать если открыта личная страница, лайтбокс, модалка
+    if (document.getElementById('detail-view')?.style.display !== 'none') return;
+    if (document.getElementById('lightbox')?.classList.contains('open')) return;
+    const scrollTop = document.scrollingElement?.scrollTop || window.scrollY;
+    if (scrollTop > 2) return;
+    _ptrStartY = e.touches[0].clientY;
+    _ptrDy = 0;
+    _ptrTriggered = false;
+    const el = document.getElementById('ptr-indicator');
+    if (el) el.style.transition = 'none';
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (_ptrStartY === 0) return;
+    const scrollTop = document.scrollingElement?.scrollTop || window.scrollY;
+    if (scrollTop > 2) { _ptrStartY = 0; _ptrReset(); return; }
+    _ptrDy = e.touches[0].clientY - _ptrStartY;
+    if (_ptrDy > 0) _ptrSetPos(_ptrDy);
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (_ptrStartY === 0) return;
+    _ptrStartY = 0;
+    if (_ptrDy >= _PTR_THRESHOLD && !_ptrRefreshing) {
+      _ptrDoRefresh();
+    } else {
+      _ptrReset();
+    }
+    _ptrDy = 0;
+  }, { passive: true });
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 function _afterLoad() {
   loadTimingsFromServer();
   loadPartnersFromServer();
@@ -852,6 +925,7 @@ function showApp() {
   document.getElementById('search-wrap').style.display = 'flex';
   const _logo=document.getElementById('header-logo'); if(_logo) _logo.style.display='block';
   initNavIcons();
+  _initPullToRefresh();
   updateUserDisplay(); renderAll();
 }
 
@@ -3246,6 +3320,17 @@ function switchTab(i) {
     location.hash = '';
   }
   _currentTab = i;
+  // Галерея: всегда обновляем данные в фоне при переходе на вкладку
+  if (i === 3) {
+    api({action:'getGallery'}).then(g => {
+      const fresh = g.photos || [];
+      if (JSON.stringify(fresh) !== JSON.stringify(gallery)) {
+        gallery = fresh;
+        _saveCache({participants, gallery, reactions});
+        if (_currentTab === 3) renderGallery();
+      }
+    }).catch(() => {});
+  }
   if (i===4) renderEvent();
   document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
   document.querySelectorAll('.view').forEach((v,j)=>v.classList.toggle('active',i===j));
