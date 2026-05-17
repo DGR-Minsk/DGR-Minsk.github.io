@@ -2541,8 +2541,8 @@ async function savePhoto(url) {
   if (type==='gallery_general') {
     const res = await apiPost({action:'addGalleryPhoto', owner_row_id:currentUser.row, owner_name:(currentUser.data&&currentUser.data['ФИО'])||currentUser.name, photo_url:url, type:'gallery'});
     console.log('addGalleryPhoto result:', JSON.stringify(res));
-    toast('Фото добавлено в галерею!'); 
-    await loadData(); 
+    toast('Фото добавлено в галерею!');
+    await loadData(true);
     renderGallery();
   } else if (type==='personal_gallery') {
     await apiPost({action:'addGalleryPhoto', owner_row_id:currentUser.row, owner_name:(currentUser.data&&currentUser.data['ФИО'])||currentUser.name, photo_url:url, type:'personal'});
@@ -2570,11 +2570,9 @@ async function savePhoto(url) {
     console.log('updateParticipant result:', JSON.stringify(res));
     if (res && res.error) { toast('Ошибка: ' + res.error); return; }
     toast('Фото сохранено!');
-    await loadData();
+    await loadData(true);
     const me = participants.find(p => p._row == currentUser.row);
-    if (me) { 
-      syncUserData(me);
-    }
+    if (me) syncUserData(me);
     renderAll();
     if (uploadCtx?.fromTab === 'bike') {
       setTimeout(() => switchTab(1), 100);
@@ -2886,7 +2884,10 @@ async function _doDeleteEverywhere() {
     }
     toast('Фото удалено везде');
     closeLightbox();
-    await loadData(true); renderAll();
+    await loadData(true);
+    const _meAfterDelAll = participants.find(p => String(p._row) === String(currentUser.row));
+    if (_meAfterDelAll) syncUserData(_meAfterDelAll);
+    renderAll();
     if (_currentTab === 3) { /* остаёмся в галерее */ }
     else if (currentRecord) openDetail(currentRecord._row);
   } catch(e) { toast('Ошибка удаления'); }
@@ -2904,6 +2905,20 @@ async function _doDeleteMyPhoto() {
       await apiPost({action:'updateParticipant', row:currentUser.row, fields:{'фото СТАЛЬНАЯ КЛАССИКА лучший байк':'','contest_bike':''}});
     } else if (lbCurrentPhoto.photoType === 'contest_style') {
       await apiPost({action:'updateParticipant', row:currentUser.row, fields:{'фото ИКОНА СТИЛЯ лучший образ':'','contest_style':''}});
+    } else if (lbCurrentPhoto.context === 'top') {
+      // Конкурсное фото открытое из ТОП страницы — очищаем поле участника
+      const targetRow = lbCurrentPhoto.ownerRow;
+      const targetP = participants.find(p => String(p._row) === String(targetRow));
+      if (targetP) {
+        if (lbCurrentPhoto.url === gcb(targetP)) {
+          await apiPost({action:'updateParticipant', row:targetRow, fields:{'фото СТАЛЬНАЯ КЛАССИКА лучший байк':'', contest_bike:'', votes_bike:'0'}});
+          // Сбросить голоса за этого участника у проголосовавших
+          await apiPost({action:'resetVotesForParticipant', targetRow, type:'bike'}).catch(()=>{});
+        } else if (lbCurrentPhoto.url === gcs(targetP)) {
+          await apiPost({action:'updateParticipant', row:targetRow, fields:{'фото ИКОНА СТИЛЯ лучший образ':'', contest_style:'', votes_style:'0'}});
+          await apiPost({action:'resetVotesForParticipant', targetRow, type:'style'}).catch(()=>{});
+        }
+      }
     } else if (lbCurrentPhoto.galleryRow) {
       await apiPost({action:'deleteGalleryPhoto', row:lbCurrentPhoto.galleryRow});
       // Также удаляем из личной коллекции если там есть
@@ -2922,6 +2937,8 @@ async function _doDeleteMyPhoto() {
     toast('Фото удалено');
     closeLightbox();
     await loadData(true);
+    const _meAfterDel = participants.find(p => String(p._row) === String(currentUser.row));
+    if (_meAfterDel) syncUserData(_meAfterDel);
     renderAll();
     if (_currentTab === 3) { /* остаёмся в галерее */ }
     else if (currentRecord) openDetail(currentRecord._row);
