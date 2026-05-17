@@ -35,7 +35,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .tabs { display: flex; background: var(--dark); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .tab { flex: 1; padding: 8px 2px; text-align: center; font-size: 10px; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; text-transform: uppercase; letter-spacing: .5px; display:flex; align-items:center; justify-content:center; gap:4px; }
 .tab.active { color: var(--gold); border-bottom-color: var(--gold); }
-.view { display: none; padding: 14px; }
+.view { display: none; padding: 14px; padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 .view.active { display: block; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .card { background: var(--card); border-radius: 14px; overflow: hidden; cursor: pointer; border: 1px solid var(--border); transition: transform .15s; }
@@ -77,7 +77,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
 .gallery-owner { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,.85)); padding: 20px 6px 5px; font-size: 10px; font-weight: 600; }
 .gallery-upload-btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--card); border: 1.5px dashed var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
-#detail-view { display: none; position: fixed; inset: 0; background: var(--black); z-index: 200; overflow-y: auto; max-width: 480px; margin: 0 auto; padding-bottom: 40px; }
+#detail-view { display: none; position: fixed; inset: 0; background: var(--black); z-index: 200; overflow-y: auto; max-width: 480px; margin: 0 auto; padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 .detail-back { position: sticky; top: 0; z-index: 10; background: rgba(8,8,8,.95); backdrop-filter: blur(10px); padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
 .back-btn { background: none; border: none; color: var(--gold); font-size: 24px; cursor: pointer; line-height: 1; }
 .detail-back-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 1px; }
@@ -151,7 +151,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .choice-btn { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; width: 100%; font-family: 'Inter', sans-serif; color: var(--text); font-size: 13px; font-weight: 600; }
 .choice-icon { font-size: 24px; }
 .choice-cancel { width: 100%; background: none; border: none; color: var(--muted); padding: 12px; font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; font-weight: 600; }
-.bottom-nav { display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(17,17,17,.98); backdrop-filter: blur(16px); border-top: 1px solid var(--border); flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.bottom-nav { display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(17,17,17,.98); backdrop-filter: blur(16px); border-top: 1px solid var(--border); flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0px); position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 250; }
 .nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 12px; cursor: pointer; color: var(--muted); font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; border: none; background: none; font-family: 'Inter',sans-serif; }
 .nav-item.active { color: var(--gold); }
 .nav-icon { font-size: 20px; display:flex; align-items:center; justify-content:center; height:28px; width:28px; line-height:1; }
@@ -1419,6 +1419,13 @@ async function deletePhotographerPhoto(row, url) {
 }
 
 async function deletePhotographerAccount() {
+  // Заблокированные фотографы не могут удалить аккаунт
+  if (currentUser && currentUser.email) {
+    const blocked = await getBlockedListCached();
+    if (blocked.some(b => b.key === currentUser.email.toLowerCase().trim())) {
+      toast('Удаление аккаунта недоступно. Обратитесь к администратору.'); return;
+    }
+  }
   showConfirm('Удалить аккаунт фотографа? Все ваши данные и фото будут удалены. Согласия будут отозваны.', async () => {
     showLoad(true);
     try {
@@ -1506,7 +1513,14 @@ async function deleteParticipantAccount() {
     'УДАЛИТЬ'
   );
 }
-function deleteGuestAccount() {
+async function deleteGuestAccount() {
+  // Заблокированные гости не могут удалить аккаунт
+  if (currentUser && currentUser.email) {
+    const blocked = await getBlockedListCached();
+    if (blocked.some(b => b.key === currentUser.email.toLowerCase().trim())) {
+      toast('Удаление аккаунта недоступно. Обратитесь к администратору.'); return;
+    }
+  }
   showConfirm('Удалить аккаунт? Все данные будут удалены, согласия отозваны. Для повторного входа потребуется верификация email.', async () => {
     showLoad(true);
     if (currentUser && currentUser.email) {
@@ -1973,6 +1987,12 @@ function renderMembers() {
     if (memberFilters.brand && getBrand(p) !== memberFilters.brand) return false;
     if (memberFilters.style && getStyle(p) !== memberFilters.style) return false;
     return true;
+  });
+  // Публично открытые участники — наверх
+  data.sort((a, b) => {
+    const ap = a['show_name'] === true || a['show_name'] === 'TRUE' ? 1 : 0;
+    const bp = b['show_name'] === true || b['show_name'] === 'TRUE' ? 1 : 0;
+    return bp - ap;
   });
   const el = document.getElementById('members-grid');
   if (!data.length) { el.innerHTML=`<div class="empty" style="grid-column:span 2">${participants.length?'Не найдено':'Загрузка...'}</div>`; return; }
@@ -2767,8 +2787,19 @@ function showLb() {
   const item=lbImages[lbIndex]; if (!item) return;
   lbCurrentPhoto=item;
   document.getElementById('lb-img').src=px(item.url, 1600);
-  document.getElementById('lb-name').textContent=item.name||'';
-  document.getElementById('lb-sub').textContent=item.sub||'';
+  const lbNameEl = document.getElementById('lb-name');
+  const lbSubEl = document.getElementById('lb-sub');
+  lbNameEl.textContent = item.name||'';
+  lbSubEl.textContent = item.sub||'';
+  // Клик на имя/байк в контексте ТОП → переход на страницу участника
+  if ((item.context==='top') && item.ownerRow) {
+    const goToParticipant = () => { closeLightbox(); openDetail(item.ownerRow); };
+    lbNameEl.style.cursor = 'pointer'; lbNameEl.onclick = goToParticipant;
+    lbSubEl.style.cursor = 'pointer'; lbSubEl.onclick = goToParticipant;
+  } else {
+    lbNameEl.style.cursor = ''; lbNameEl.onclick = null;
+    lbSubEl.style.cursor = ''; lbSubEl.onclick = null;
+  }
   document.getElementById('lb-delete-confirm').style.display='none';
   ['lb-save','lb-remove-col','lb-delete','lb-delete-all','lb-update','lb-like'].forEach(id => {
     const b = document.getElementById(id);
@@ -3191,6 +3222,12 @@ function goAbout() { switchTab(4); }
 let _currentTab = 0;
 function switchTab(i) {
   if (_selectMode) clearSelectionUI();
+  // Закрыть страницу участника если открыта
+  const dv = document.getElementById('detail-view');
+  if (dv && dv.style.display !== 'none') {
+    dv.style.display = 'none';
+    location.hash = '';
+  }
   _currentTab = i;
   if (i===4) renderEvent();
   document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
