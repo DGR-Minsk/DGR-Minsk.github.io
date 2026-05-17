@@ -859,12 +859,17 @@ async function _ptrDoRefresh() {
 }
 
 function _initPullToRefresh() {
+  function _getScrollTop() {
+    // Главный скролл-контейнер приложения
+    return document.getElementById('main-scroll')?.scrollTop || 0;
+  }
+
   document.addEventListener('touchstart', e => {
     // Не срабатывать если открыта личная страница, лайтбокс, модалка
     if (document.getElementById('detail-view')?.style.display !== 'none') return;
     if (document.getElementById('lightbox')?.classList.contains('open')) return;
-    const scrollTop = document.scrollingElement?.scrollTop || window.scrollY;
-    if (scrollTop > 2) return;
+    // Только если контейнер уже в самом верху
+    if (_getScrollTop() > 2) return;
     _ptrStartY = e.touches[0].clientY;
     _ptrDy = 0;
     _ptrTriggered = false;
@@ -874,8 +879,8 @@ function _initPullToRefresh() {
 
   document.addEventListener('touchmove', e => {
     if (_ptrStartY === 0) return;
-    const scrollTop = document.scrollingElement?.scrollTop || window.scrollY;
-    if (scrollTop > 2) { _ptrStartY = 0; _ptrReset(); return; }
+    // Если во время движения страница уже проскроллилась вниз — отменяем
+    if (_getScrollTop() > 2) { _ptrStartY = 0; _ptrReset(); return; }
     _ptrDy = e.touches[0].clientY - _ptrStartY;
     if (_ptrDy > 0) _ptrSetPos(_ptrDy);
   }, { passive: true });
