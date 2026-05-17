@@ -2313,7 +2313,7 @@ function openDetail(row) {
         <span>Заводское фото байка</span>
         ${isMe?`<button onclick="openFactoryPhotoEdit()" style="background:none;border:none;color:var(--gold);font-family:'Inter',sans-serif;font-size:11px;font-weight:600;cursor:pointer;padding:0;margin-right:16px">✏ Редактировать</button>`:''}
       </div>
-    ${factory?`<img src="${px(factory)}" onclick="openLbSingle('${factory}','${p['ФИО']}','Заводское фото байка')" style="width:100%;max-height:280px;object-fit:contain;background:var(--card);cursor:pointer;display:block">`:`<div class="detail-hero-ph">🏍</div>`}
+    ${factory?`<img src="${px(factory)}" onclick="openLbSingle('${factory}','${p['ФИО']}','Заводское фото байка')" style="width:100%;max-height:280px;object-fit:contain;background:var(--card);cursor:pointer;display:block">`:`<div class="detail-hero-ph"><span style="opacity:.35">${svgIcon('bike','icon-yellow',80)}</span></div>`}
     <div class="detail-body">
 
       ${live?`<div class="section-title">📷 Живое фото байка${isMe?' <span onclick="openLivePhotoEdit()" style="color:var(--gold);font-size:11px;cursor:pointer;font-weight:600">✏ Редактировать</span>':' участника'}</div>
